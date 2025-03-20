@@ -1,25 +1,25 @@
 spring:
+  application:
+    name: customer-service
   data:
     mongodb:
       uri: mongodb://localhost:27017/customerdb
       auto-index-creation: true
 
-# Swagger / OpenAPI configuration
+server:
+  port: 8080
+  servlet:
+    context-path: /api
+
 springdoc:
   api-docs:
     path: /api-docs
   swagger-ui:
     path: /swagger-ui.html
     operationsSorter: method
+  packages-to-scan: com.example.customerservice.controller
 
-# Server configuration
-server:
-  port: 8080
-  servlet:
-    context-path: /api
-
-# Logging
 logging:
   level:
-    org.springframework.data.mongodb.core.MongoTemplate: DEBUG
-    com.example.customerservice: DEBUG 
+    org.springframework.data.mongodb: INFO
+    com.example.customerservice: DEBUG
