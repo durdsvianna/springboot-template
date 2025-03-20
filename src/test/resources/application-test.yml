@@ -1,11 +1,13 @@
 spring:
   data:
     mongodb:
+      uri: mongodb://${embedded.mongodb.host}:${embedded.mongodb.port}/test
       auto-index-creation: true
-  # The MongoDB URI will be set by the TestContainer
-
-# Disable context path for testing
+  
 server:
   port: 0
-  servlet:
-    context-path: /api 
+
+logging:
+  level:
+    org.springframework.data.mongodb: INFO
+    com.example.customerservice: DEBUG
