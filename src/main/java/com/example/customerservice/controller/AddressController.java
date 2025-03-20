@@ -1,83 +1,163 @@
 package com.example.customerservice.controller;
 
-import com.example.customerservice.dto.AddressDto;
-import com.example.customerservice.service.AddressService;
-import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.Parameter;
-import io.swagger.v3.oas.annotations.tags.Tag;
-import jakarta.validation.Valid;
-import lombok.RequiredArgsConstructor;
+import java.net.URI;
+import java.util.List;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
-import java.util.List;
+import com.example.customerservice.dto.AddressDto;
+import com.example.customerservice.service.AddressService;
+
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
+
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
 
 @RestController
 @RequestMapping("/addresses")
 @RequiredArgsConstructor
-@Tag(name = "Address", description = "Address management API")
+@Tag(name = "Address", description = "Address management endpoints")
 public class AddressController {
 
     private final AddressService addressService;
 
-    @PostMapping
-    @Operation(summary = "Create a new address", description = "Creates a new address for a customer")
-    public ResponseEntity<AddressDto> createAddress(@Valid @RequestBody AddressDto addressDto) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(addressService.createAddress(addressDto));
-    }
-
-    @GetMapping("/{id}")
-    @Operation(summary = "Get address by ID", description = "Returns an address by its ID")
-    public ResponseEntity<AddressDto> getAddressById(
-            @Parameter(description = "Address ID", required = true) @PathVariable String id) {
-        return ResponseEntity.ok(addressService.getAddressById(id));
-    }
-
-    @GetMapping("/customer/{customerId}")
-    @Operation(summary = "Get addresses by customer ID", description = "Returns all addresses for a specific customer")
-    public ResponseEntity<List<AddressDto>> getAddressesByCustomerId(
-            @Parameter(description = "Customer ID", required = true) @PathVariable String customerId) {
-        return ResponseEntity.ok(addressService.getAddressesByCustomerId(customerId));
-    }
-
-    @GetMapping("/customer/{customerId}/default")
-    @Operation(summary = "Get default address", description = "Returns the default address for a customer if set")
-    public ResponseEntity<AddressDto> getDefaultAddress(
-            @Parameter(description = "Customer ID", required = true) @PathVariable String customerId) {
-        return ResponseEntity.ok(addressService.getDefaultAddress(customerId));
-    }
-
-    @GetMapping("/search")
-    @Operation(summary = "Search addresses", description = "Search addresses by city, state, or zip code")
-    public ResponseEntity<List<AddressDto>> searchAddresses(
-            @Parameter(description = "City") @RequestParam(required = false) String city,
-            @Parameter(description = "State") @RequestParam(required = false) String state,
-            @Parameter(description = "Zip code") @RequestParam(required = false) String zipCode) {
-        return ResponseEntity.ok(addressService.searchAddresses(city, state, zipCode));
-    }
-
-    @PutMapping("/{id}")
-    @Operation(summary = "Update address", description = "Updates an existing address")
-    public ResponseEntity<AddressDto> updateAddress(
-            @Parameter(description = "Address ID", required = true) @PathVariable String id,
+    @Operation(summary = "Create a new address for a customer")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "201", description = "Address created", 
+                content = @Content(schema = @Schema(implementation = AddressDto.class))),
+        @ApiResponse(responseCode = "400", description = "Invalid input"),
+        @ApiResponse(responseCode = "404", description = "Customer not found")
+    })
+    @PostMapping("/customer/{customerId}")
+    public ResponseEntity<AddressDto> createAddress(
+            @Parameter(description = "Customer ID") @PathVariable String customerId,
             @Valid @RequestBody AddressDto addressDto) {
-        return ResponseEntity.ok(addressService.updateAddress(id, addressDto));
+        
+        AddressDto createdAddress = addressService.createAddress(customerId, addressDto);
+        
+        URI location = ServletUriComponentsBuilder
+                .fromCurrentRequest()
+                .replacePath("/addresses/{id}")
+                .buildAndExpand(createdAddress.getId())
+                .toUri();
+        
+        return ResponseEntity.created(location).body(createdAddress);
     }
 
+    @Operation(summary = "Get an address by ID")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Found the address", 
+                content = @Content(schema = @Schema(implementation = AddressDto.class))),
+        @ApiResponse(responseCode = "404", description = "Address not found")
+    })
+    @GetMapping("/{id}")
+    public ResponseEntity<AddressDto> getAddressById(
+            @Parameter(description = "Address ID") @PathVariable String id) {
+        
+        AddressDto address = addressService.getAddressById(id);
+        return ResponseEntity.ok(address);
+    }
+
+    @Operation(summary = "Get all addresses for a customer")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "List of addresses returned"),
+        @ApiResponse(responseCode = "404", description = "Customer not found")
+    })
+    @GetMapping("/customer/{customerId}")
+    public ResponseEntity<List<AddressDto>> getAddressesByCustomerId(
+            @Parameter(description = "Customer ID") @PathVariable String customerId) {
+        
+        List<AddressDto> addresses = addressService.getAddressesByCustomerId(customerId);
+        return ResponseEntity.ok(addresses);
+    }
+
+    @Operation(summary = "Get the default address for a customer")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Found the default address", 
+                content = @Content(schema = @Schema(implementation = AddressDto.class))),
+        @ApiResponse(responseCode = "404", description = "Customer not found or no default address")
+    })
+    @GetMapping("/customer/{customerId}/default")
+    public ResponseEntity<AddressDto> getDefaultAddress(
+            @Parameter(description = "Customer ID") @PathVariable String customerId) {
+        
+        AddressDto address = addressService.getDefaultAddress(customerId);
+        return ResponseEntity.ok(address);
+    }
+
+    @Operation(summary = "Update an address")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Address updated", 
+                content = @Content(schema = @Schema(implementation = AddressDto.class))),
+        @ApiResponse(responseCode = "400", description = "Invalid input"),
+        @ApiResponse(responseCode = "404", description = "Address not found")
+    })
+    @PutMapping("/{id}")
+    public ResponseEntity<AddressDto> updateAddress(
+            @Parameter(description = "Address ID") @PathVariable String id,
+            @Valid @RequestBody AddressDto addressDto) {
+        
+        AddressDto updatedAddress = addressService.updateAddress(id, addressDto);
+        return ResponseEntity.ok(updatedAddress);
+    }
+
+    @Operation(summary = "Set an address as the default")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Address set as default", 
+                content = @Content(schema = @Schema(implementation = AddressDto.class))),
+        @ApiResponse(responseCode = "404", description = "Address or customer not found")
+    })
     @PutMapping("/{addressId}/customer/{customerId}/default")
-    @Operation(summary = "Set as default address", description = "Sets an address as the default for a customer")
-    public ResponseEntity<AddressDto> setDefaultAddress(
-            @Parameter(description = "Address ID", required = true) @PathVariable String addressId,
-            @Parameter(description = "Customer ID", required = true) @PathVariable String customerId) {
-        return ResponseEntity.ok(addressService.setDefaultAddress(addressId, customerId));
+    public ResponseEntity<AddressDto> setAddressAsDefault(
+            @Parameter(description = "Address ID") @PathVariable String addressId,
+            @Parameter(description = "Customer ID") @PathVariable String customerId) {
+        
+        AddressDto updatedAddress = addressService.setAddressAsDefault(addressId, customerId);
+        return ResponseEntity.ok(updatedAddress);
     }
 
+    @Operation(summary = "Delete an address")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "204", description = "Address deleted"),
+        @ApiResponse(responseCode = "404", description = "Address not found")
+    })
     @DeleteMapping("/{id}")
-    @Operation(summary = "Delete address", description = "Deletes an address by ID")
-    public ResponseEntity<Void> deleteAddress(
-            @Parameter(description = "Address ID", required = true) @PathVariable String id) {
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteAddress(
+            @Parameter(description = "Address ID") @PathVariable String id) {
+        
         addressService.deleteAddress(id);
-        return ResponseEntity.noContent().build();
+    }
+
+    @Operation(summary = "Search addresses by city")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "List of matching addresses returned"),
+        @ApiResponse(responseCode = "404", description = "Customer not found")
+    })
+    @GetMapping("/customer/{customerId}/search")
+    public ResponseEntity<List<AddressDto>> findAddressesByCity(
+            @Parameter(description = "Customer ID") @PathVariable String customerId,
+            @Parameter(description = "City to search for") @RequestParam String city) {
+        
+        List<AddressDto> addresses = addressService.findAddressesByCity(customerId, city);
+        return ResponseEntity.ok(addresses);
     }
 }
