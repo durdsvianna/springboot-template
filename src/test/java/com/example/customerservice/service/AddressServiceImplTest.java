@@ -1,9 +1,20 @@
 package com.example.customerservice.service;
 
-import com.example.customerservice.dto.AddressDto;
-import com.example.customerservice.model.Address;
-import com.example.customerservice.repository.AddressRepository;
-import com.example.customerservice.service.impl.AddressServiceImpl;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+import java.util.Arrays;
+import java.util.List;
+import java.util.Optional;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -11,15 +22,13 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.util.Arrays;
-import java.util.List;
-import java.util.NoSuchElementException;
-import java.util.Optional;
-
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.*;
+import com.example.customerservice.dto.AddressDto;
+import com.example.customerservice.exception.NotFoundException;
+import com.example.customerservice.mapper.AddressMapper;
+import com.example.customerservice.model.Address;
+import com.example.customerservice.repository.AddressRepository;
+import com.example.customerservice.repository.CustomerRepository;
+import com.example.customerservice.service.impl.AddressServiceImpl;
 
 @ExtendWith(MockitoExtension.class)
 class AddressServiceImplTest {
@@ -27,344 +36,360 @@ class AddressServiceImplTest {
     @Mock
     private AddressRepository addressRepository;
 
+    @Mock
+    private CustomerRepository customerRepository;
+
+    @Mock
+    private AddressMapper addressMapper;
+
     @InjectMocks
     private AddressServiceImpl addressService;
 
-    private Address testAddress;
-    private AddressDto testAddressDto;
-    private Address defaultAddress;
+    private Address address;
+    private AddressDto addressDto;
+    private final String ADDRESS_ID = "64a1db45e7cb171cddc52805";
+    private final String CUSTOMER_ID = "64a1db45e7cb171cddc52804";
 
     @BeforeEach
     void setUp() {
-        testAddress = Address.builder()
-                .id("addr1")
-                .street("123 Main St")
-                .city("Anytown")
-                .state("NY")
-                .zipCode("12345")
-                .country("USA")
-                .isDefault(false)
-                .customerId("customer1")
-                .build();
-
-        defaultAddress = Address.builder()
-                .id("addr2")
-                .street("456 Oak St")
-                .city("Othertown")
-                .state("CA")
-                .zipCode("67890")
-                .country("USA")
-                .isDefault(true)
-                .customerId("customer1")
-                .build();
-
-        testAddressDto = AddressDto.builder()
-                .id("addr1")
-                .street("123 Main St")
-                .city("Anytown")
-                .state("NY")
-                .zipCode("12345")
-                .country("USA")
-                .isDefault(false)
-                .customerId("customer1")
-                .build();
-    }
-
-    @Test
-    void createAddress_ShouldCreateAddress() {
-        // Given
-        when(addressRepository.save(any(Address.class))).thenReturn(testAddress);
-
-        // When
-        AddressDto result = addressService.createAddress(testAddressDto);
-
-        // Then
-        assertNotNull(result);
-        assertEquals(testAddress.getId(), result.getId());
-        assertEquals(testAddress.getStreet(), result.getStreet());
-        verify(addressRepository).save(any(Address.class));
-    }
-
-    @Test
-    void createAddress_WithDefaultTrue_ShouldResetExistingDefault() {
-        // Given
-        testAddressDto.setIsDefault(true);
-        when(addressRepository.findByCustomerIdAndIsDefaultTrue(anyString()))
-                .thenReturn(Optional.of(defaultAddress));
-        when(addressRepository.save(any(Address.class))).thenReturn(testAddress);
-
-        // When
-        addressService.createAddress(testAddressDto);
-
-        // Then
-        verify(addressRepository).findByCustomerIdAndIsDefaultTrue("customer1");
-        // Verify the existing default address is updated to non-default
-        verify(addressRepository).save(defaultAddress);
-        // Verify the new address is saved
-        verify(addressRepository, times(2)).save(any(Address.class));
-    }
-
-    @Test
-    void getAddressById_ShouldReturnAddress() {
-        // Given
-        when(addressRepository.findById(anyString())).thenReturn(Optional.of(testAddress));
-
-        // When
-        AddressDto result = addressService.getAddressById("addr1");
-
-        // Then
-        assertNotNull(result);
-        assertEquals(testAddress.getId(), result.getId());
-        assertEquals(testAddress.getStreet(), result.getStreet());
-        verify(addressRepository).findById("addr1");
-    }
-
-    @Test
-    void getAddressById_WithNonExistentId_ShouldThrowException() {
-        // Given
-        when(addressRepository.findById(anyString())).thenReturn(Optional.empty());
-
-        // When & Then
-        assertThrows(NoSuchElementException.class, () -> addressService.getAddressById("nonexistent"));
-        verify(addressRepository).findById("nonexistent");
-    }
-
-    @Test
-    void getAddressesByCustomerId_ShouldReturnAddresses() {
-        // Given
-        List<Address> addresses = Arrays.asList(testAddress, defaultAddress);
-        when(addressRepository.findByCustomerId(anyString())).thenReturn(addresses);
-
-        // When
-        List<AddressDto> result = addressService.getAddressesByCustomerId("customer1");
-
-        // Then
-        assertNotNull(result);
-        assertEquals(2, result.size());
-        assertEquals(testAddress.getId(), result.get(0).getId());
-        assertEquals(defaultAddress.getId(), result.get(1).getId());
-        verify(addressRepository).findByCustomerId("customer1");
-    }
-
-    @Test
-    void getDefaultAddress_ShouldReturnDefaultAddress() {
-        // Given
-        when(addressRepository.findByCustomerIdAndIsDefaultTrue(anyString()))
-                .thenReturn(Optional.of(defaultAddress));
-
-        // When
-        AddressDto result = addressService.getDefaultAddress("customer1");
-
-        // Then
-        assertNotNull(result);
-        assertEquals(defaultAddress.getId(), result.getId());
-        assertTrue(result.getIsDefault());
-        verify(addressRepository).findByCustomerIdAndIsDefaultTrue("customer1");
-    }
-
-    @Test
-    void getDefaultAddress_WithNoDefault_ShouldThrowException() {
-        // Given
-        when(addressRepository.findByCustomerIdAndIsDefaultTrue(anyString()))
-                .thenReturn(Optional.empty());
-
-        // When & Then
-        assertThrows(NoSuchElementException.class, () -> addressService.getDefaultAddress("customer1"));
-        verify(addressRepository).findByCustomerIdAndIsDefaultTrue("customer1");
-    }
-
-    @Test
-    void searchAddresses_ByCity_ShouldReturnMatchingAddresses() {
-        // Given
-        List<Address> addresses = Arrays.asList(testAddress);
-        when(addressRepository.findByCity(anyString())).thenReturn(addresses);
-
-        // When
-        List<AddressDto> result = addressService.searchAddresses("Anytown", null, null);
-
-        // Then
-        assertNotNull(result);
-        assertEquals(1, result.size());
-        assertEquals(testAddress.getId(), result.get(0).getId());
-        verify(addressRepository).findByCity("Anytown");
-    }
-
-    @Test
-    void searchAddresses_ByState_ShouldReturnMatchingAddresses() {
-        // Given
-        List<Address> addresses = Arrays.asList(testAddress);
-        when(addressRepository.findByState(anyString())).thenReturn(addresses);
-
-        // When
-        List<AddressDto> result = addressService.searchAddresses(null, "NY", null);
-
-        // Then
-        assertNotNull(result);
-        assertEquals(1, result.size());
-        assertEquals(testAddress.getId(), result.get(0).getId());
-        verify(addressRepository).findByState("NY");
-    }
-
-    @Test
-    void searchAddresses_ByZipCode_ShouldReturnMatchingAddresses() {
-        // Given
-        List<Address> addresses = Arrays.asList(testAddress);
-        when(addressRepository.findByZipCode(anyString())).thenReturn(addresses);
-
-        // When
-        List<AddressDto> result = addressService.searchAddresses(null, null, "12345");
-
-        // Then
-        assertNotNull(result);
-        assertEquals(1, result.size());
-        assertEquals(testAddress.getId(), result.get(0).getId());
-        verify(addressRepository).findByZipCode("12345");
-    }
-
-    @Test
-    void updateAddress_ShouldUpdateAddress() {
-        // Given
-        AddressDto updateDto = AddressDto.builder()
-                .street("Updated Street")
-                .city("Updated City")
-                .state("TX")
-                .zipCode("54321")
-                .country("USA")
-                .isDefault(false)
-                .build();
-
-        Address updatedAddress = Address.builder()
-                .id("addr1")
-                .street("Updated Street")
-                .city("Updated City")
-                .state("TX")
-                .zipCode("54321")
-                .country("USA")
-                .isDefault(false)
-                .customerId("customer1")
-                .build();
-
-        when(addressRepository.findById(anyString())).thenReturn(Optional.of(testAddress));
-        when(addressRepository.save(any(Address.class))).thenReturn(updatedAddress);
-
-        // When
-        AddressDto result = addressService.updateAddress("addr1", updateDto);
-
-        // Then
-        assertNotNull(result);
-        assertEquals("Updated Street", result.getStreet());
-        assertEquals("Updated City", result.getCity());
-        assertEquals("TX", result.getState());
-        verify(addressRepository).save(any(Address.class));
-    }
-
-    @Test
-    void updateAddress_SettingAsDefault_ShouldResetExistingDefault() {
-        // Given
-        AddressDto updateDto = AddressDto.builder()
-                .street("123 Main St")
-                .city("Anytown")
-                .state("NY")
-                .zipCode("12345")
-                .country("USA")
-                .isDefault(true) // Setting as default
-                .build();
-
-        when(addressRepository.findById(anyString())).thenReturn(Optional.of(testAddress));
-        when(addressRepository.findByCustomerIdAndIsDefaultTrue(anyString()))
-                .thenReturn(Optional.of(defaultAddress));
-        when(addressRepository.save(any(Address.class))).thenReturn(testAddress);
-
-        // When
-        addressService.updateAddress("addr1", updateDto);
-
-        // Then
-        verify(addressRepository).findByCustomerIdAndIsDefaultTrue("customer1");
-        // Verify the existing default address is updated to non-default
-        verify(addressRepository).save(defaultAddress);
-        // Verify the updated address is saved
-        verify(addressRepository, times(2)).save(any(Address.class));
-    }
-
-    @Test
-    void deleteAddress_ShouldDeleteAddress() {
-        // Given
-        when(addressRepository.findById(anyString())).thenReturn(Optional.of(testAddress));
-        doNothing().when(addressRepository).delete(any(Address.class));
-
-        // When
-        addressService.deleteAddress("addr1");
-
-        // Then
-        verify(addressRepository).findById("addr1");
-        verify(addressRepository).delete(testAddress);
-    }
-
-    @Test
-    void deleteCustomerAddresses_ShouldDeleteAllCustomerAddresses() {
-        // Given
-        List<Address> addresses = Arrays.asList(testAddress, defaultAddress);
-        when(addressRepository.findByCustomerId(anyString())).thenReturn(addresses);
-        doNothing().when(addressRepository).deleteAll(anyList());
-
-        // When
-        addressService.deleteCustomerAddresses("customer1");
-
-        // Then
-        verify(addressRepository).findByCustomerId("customer1");
-        verify(addressRepository).deleteAll(addresses);
-    }
-
-    @Test
-    void setDefaultAddress_ShouldSetAddressAsDefault() {
-        // Given
-        when(addressRepository.findById(anyString())).thenReturn(Optional.of(testAddress));
-        when(addressRepository.findByCustomerIdAndIsDefaultTrue(anyString()))
-                .thenReturn(Optional.of(defaultAddress));
-
-        Address updatedAddress = Address.builder()
-                .id("addr1")
+        address = Address.builder()
+                .id(ADDRESS_ID)
+                .customerId(CUSTOMER_ID)
                 .street("123 Main St")
                 .city("Anytown")
                 .state("NY")
                 .zipCode("12345")
                 .country("USA")
                 .isDefault(true)
-                .customerId("customer1")
                 .build();
 
-        when(addressRepository.save(any(Address.class))).thenReturn(updatedAddress);
+        addressDto = AddressDto.builder()
+                .id(ADDRESS_ID)
+                .customerId(CUSTOMER_ID)
+                .street("123 Main St")
+                .city("Anytown")
+                .state("NY")
+                .zipCode("12345")
+                .country("USA")
+                .isDefault(true)
+                .build();
+    }
 
-        // When
-        AddressDto result = addressService.setDefaultAddress("addr1", "customer1");
+    @Test
+    void createAddress_WhenCustomerExistsAndNoCurrentDefault_ShouldReturnAddressDto() {
+        // Arrange
+        when(customerRepository.existsById(anyString())).thenReturn(true);
+        when(addressRepository.findByCustomerId(anyString())).thenReturn(List.of());
+        when(addressMapper.toEntity(any(AddressDto.class))).thenReturn(address);
+        when(addressRepository.save(any(Address.class))).thenReturn(address);
+        when(addressMapper.toDto(any(Address.class))).thenReturn(addressDto);
 
-        // Then
-        assertNotNull(result);
-        assertTrue(result.getIsDefault());
-        verify(addressRepository).findById("addr1");
-        verify(addressRepository).findByCustomerIdAndIsDefaultTrue("customer1");
-        // Verify the existing default address is updated to non-default
-        verify(addressRepository).save(defaultAddress);
-        // Verify the new address is saved as default
+        // Act
+        AddressDto result = addressService.createAddress(CUSTOMER_ID, addressDto);
+
+        // Assert
+        assertThat(result).isNotNull();
+        assertThat(result.getId()).isEqualTo(ADDRESS_ID);
+        assertThat(result.getCustomerId()).isEqualTo(CUSTOMER_ID);
+        assertThat(result.isDefault()).isTrue();
+        verify(customerRepository, times(1)).existsById(CUSTOMER_ID);
+        verify(addressRepository, times(1)).findByCustomerId(CUSTOMER_ID);
+        verify(addressMapper, times(1)).toEntity(addressDto);
+        verify(addressRepository, times(1)).save(address);
+        verify(addressMapper, times(1)).toDto(address);
+    }
+
+    @Test
+    void createAddress_WhenCustomerExistsWithCurrentDefault_ShouldClearPreviousDefault() {
+        // Arrange
+        Address existingAddress = Address.builder()
+                .id("456")
+                .customerId(CUSTOMER_ID)
+                .isDefault(true)
+                .build();
+        
+        when(customerRepository.existsById(anyString())).thenReturn(true);
+        when(addressRepository.findByCustomerId(anyString())).thenReturn(List.of(existingAddress));
+        when(addressRepository.findByCustomerIdAndIsDefault(anyString(), anyBoolean()))
+                .thenReturn(Optional.of(existingAddress));
+        when(addressRepository.save(any(Address.class))).thenReturn(address);
+        when(addressMapper.toEntity(any(AddressDto.class))).thenReturn(address);
+        when(addressMapper.toDto(any(Address.class))).thenReturn(addressDto);
+
+        // Act
+        AddressDto result = addressService.createAddress(CUSTOMER_ID, addressDto);
+
+        // Assert
+        assertThat(result).isNotNull();
+        assertThat(result.isDefault()).isTrue();
+        verify(addressRepository, times(1))
+                .findByCustomerIdAndIsDefault(CUSTOMER_ID, true);
         verify(addressRepository, times(2)).save(any(Address.class));
     }
 
     @Test
-    void setDefaultAddress_WithAddressNotBelongingToCustomer_ShouldThrowException() {
-        // Given
-        Address wrongCustomerAddress = Address.builder()
-                .id("addr1")
-                .customerId("differentCustomer")
-                .build();
+    void createAddress_WhenCustomerDoesNotExist_ShouldThrowNotFoundException() {
+        // Arrange
+        when(customerRepository.existsById(anyString())).thenReturn(false);
 
-        when(addressRepository.findById(anyString())).thenReturn(Optional.of(wrongCustomerAddress));
+        // Act & Assert
+        assertThatThrownBy(() -> addressService.createAddress(CUSTOMER_ID, addressDto))
+                .isInstanceOf(NotFoundException.class)
+                .hasMessageContaining("Customer with id '" + CUSTOMER_ID + "' not found");
 
-        // When & Then
-        IllegalArgumentException exception = assertThrows(
-                IllegalArgumentException.class,
-                () -> addressService.setDefaultAddress("addr1", "customer1")
-        );
-        assertTrue(exception.getMessage().contains("does not belong to the specified customer"));
+        verify(customerRepository, times(1)).existsById(CUSTOMER_ID);
+        verify(addressMapper, never()).toEntity(any(AddressDto.class));
         verify(addressRepository, never()).save(any(Address.class));
     }
-} 
+
+    @Test
+    void getAddressById_WhenAddressExists_ShouldReturnAddressDto() {
+        // Arrange
+        when(addressRepository.findById(anyString())).thenReturn(Optional.of(address));
+        when(addressMapper.toDto(any(Address.class))).thenReturn(addressDto);
+
+        // Act
+        AddressDto result = addressService.getAddressById(ADDRESS_ID);
+
+        // Assert
+        assertThat(result).isNotNull();
+        assertThat(result.getId()).isEqualTo(ADDRESS_ID);
+        verify(addressRepository, times(1)).findById(ADDRESS_ID);
+        verify(addressMapper, times(1)).toDto(address);
+    }
+
+    @Test
+    void getAddressById_WhenAddressDoesNotExist_ShouldThrowNotFoundException() {
+        // Arrange
+        when(addressRepository.findById(anyString())).thenReturn(Optional.empty());
+
+        // Act & Assert
+        assertThatThrownBy(() -> addressService.getAddressById(ADDRESS_ID))
+                .isInstanceOf(NotFoundException.class)
+                .hasMessageContaining("Address with id '" + ADDRESS_ID + "' not found");
+
+        verify(addressRepository, times(1)).findById(ADDRESS_ID);
+        verify(addressMapper, never()).toDto(any(Address.class));
+    }
+
+    @Test
+    void getAddressesByCustomerId_WhenCustomerExists_ShouldReturnAddressList() {
+        // Arrange
+        List<Address> addresses = Arrays.asList(address, 
+                Address.builder().id("456").customerId(CUSTOMER_ID).build());
+        List<AddressDto> addressDtos = Arrays.asList(addressDto, 
+                AddressDto.builder().id("456").customerId(CUSTOMER_ID).build());
+
+        when(customerRepository.existsById(anyString())).thenReturn(true);
+        when(addressRepository.findByCustomerId(anyString())).thenReturn(addresses);
+        when(addressMapper.toDtoList(any())).thenReturn(addressDtos);
+
+        // Act
+        List<AddressDto> result = addressService.getAddressesByCustomerId(CUSTOMER_ID);
+
+        // Assert
+        assertThat(result).isNotNull();
+        assertThat(result.size()).isEqualTo(2);
+        verify(customerRepository, times(1)).existsById(CUSTOMER_ID);
+        verify(addressRepository, times(1)).findByCustomerId(CUSTOMER_ID);
+        verify(addressMapper, times(1)).toDtoList(addresses);
+    }
+
+    @Test
+    void getAddressesByCustomerId_WhenCustomerDoesNotExist_ShouldThrowNotFoundException() {
+        // Arrange
+        when(customerRepository.existsById(anyString())).thenReturn(false);
+
+        // Act & Assert
+        assertThatThrownBy(() -> addressService.getAddressesByCustomerId(CUSTOMER_ID))
+                .isInstanceOf(NotFoundException.class)
+                .hasMessageContaining("Customer with id '" + CUSTOMER_ID + "' not found");
+
+        verify(customerRepository, times(1)).existsById(CUSTOMER_ID);
+        verify(addressRepository, never()).findByCustomerId(anyString());
+    }
+
+    @Test
+    void getDefaultAddress_WhenDefaultAddressExists_ShouldReturnAddressDto() {
+        // Arrange
+        when(customerRepository.existsById(anyString())).thenReturn(true);
+        when(addressRepository.findByCustomerIdAndIsDefault(anyString(), anyBoolean()))
+                .thenReturn(Optional.of(address));
+        when(addressMapper.toDto(any(Address.class))).thenReturn(addressDto);
+
+        // Act
+        AddressDto result = addressService.getDefaultAddress(CUSTOMER_ID);
+
+        // Assert
+        assertThat(result).isNotNull();
+        assertThat(result.isDefault()).isTrue();
+        verify(customerRepository, times(1)).existsById(CUSTOMER_ID);
+        verify(addressRepository, times(1)).findByCustomerIdAndIsDefault(CUSTOMER_ID, true);
+        verify(addressMapper, times(1)).toDto(address);
+    }
+
+    @Test
+    void getDefaultAddress_WhenNoDefaultAddress_ShouldThrowNotFoundException() {
+        // Arrange
+        when(customerRepository.existsById(anyString())).thenReturn(true);
+        when(addressRepository.findByCustomerIdAndIsDefault(anyString(), anyBoolean()))
+                .thenReturn(Optional.empty());
+
+        // Act & Assert
+        assertThatThrownBy(() -> addressService.getDefaultAddress(CUSTOMER_ID))
+                .isInstanceOf(NotFoundException.class)
+                .hasMessageContaining("Default address for customer with id '" + CUSTOMER_ID + "' not found");
+
+        verify(customerRepository, times(1)).existsById(CUSTOMER_ID);
+        verify(addressRepository, times(1)).findByCustomerIdAndIsDefault(CUSTOMER_ID, true);
+    }
+
+    @Test
+    void updateAddress_WhenAddressExists_ShouldReturnUpdatedAddressDto() {
+        // Arrange
+        when(addressRepository.findById(anyString())).thenReturn(Optional.of(address));
+        when(addressMapper.updateEntity(any(AddressDto.class), any(Address.class))).thenReturn(address);
+        when(addressRepository.save(any(Address.class))).thenReturn(address);
+        when(addressMapper.toDto(any(Address.class))).thenReturn(addressDto);
+
+        // Act
+        AddressDto result = addressService.updateAddress(ADDRESS_ID, addressDto);
+
+        // Assert
+        assertThat(result).isNotNull();
+        assertThat(result.getId()).isEqualTo(ADDRESS_ID);
+        verify(addressRepository, times(1)).findById(ADDRESS_ID);
+        verify(addressMapper, times(1)).updateEntity(addressDto, address);
+        verify(addressRepository, times(1)).save(address);
+        verify(addressMapper, times(1)).toDto(address);
+    }
+
+    @Test
+    void updateAddress_WhenAddressDoesNotExist_ShouldThrowNotFoundException() {
+        // Arrange
+        when(addressRepository.findById(anyString())).thenReturn(Optional.empty());
+
+        // Act & Assert
+        assertThatThrownBy(() -> addressService.updateAddress(ADDRESS_ID, addressDto))
+                .isInstanceOf(NotFoundException.class)
+                .hasMessageContaining("Address with id '" + ADDRESS_ID + "' not found");
+
+        verify(addressRepository, times(1)).findById(ADDRESS_ID);
+        verify(addressMapper, never()).updateEntity(any(AddressDto.class), any(Address.class));
+        verify(addressRepository, never()).save(any(Address.class));
+    }
+
+    @Test
+    void setAddressAsDefault_WhenAddressExists_ShouldSetDefaultAndClearOthers() {
+        // Arrange
+        Address otherAddress = Address.builder()
+                .id("456")
+                .customerId(CUSTOMER_ID)
+                .isDefault(true)
+                .build();
+        
+        address.setDefault(false);
+        
+        when(customerRepository.existsById(anyString())).thenReturn(true);
+        when(addressRepository.findById(anyString())).thenReturn(Optional.of(address));
+        when(addressRepository.findByCustomerIdAndIsDefault(anyString(), anyBoolean()))
+                .thenReturn(Optional.of(otherAddress));
+        when(addressRepository.save(any(Address.class))).thenReturn(address);
+        when(addressMapper.toDto(any(Address.class))).thenReturn(addressDto);
+
+        // Act
+        AddressDto result = addressService.setAddressAsDefault(ADDRESS_ID, CUSTOMER_ID);
+
+        // Assert
+        assertThat(result).isNotNull();
+        assertThat(result.isDefault()).isTrue();
+        verify(customerRepository, times(1)).existsById(CUSTOMER_ID);
+        verify(addressRepository, times(1)).findById(ADDRESS_ID);
+        verify(addressRepository, times(1)).findByCustomerIdAndIsDefault(CUSTOMER_ID, true);
+        verify(addressRepository, times(2)).save(any(Address.class));
+        verify(addressMapper, times(1)).toDto(address);
+    }
+
+    @Test
+    void setAddressAsDefault_WhenAddressDoesNotBelongToCustomer_ShouldThrowNotFoundException() {
+        // Arrange
+        Address wrongAddress = Address.builder()
+                .id(ADDRESS_ID)
+                .customerId("wrong-customer-id")
+                .build();
+        
+        when(customerRepository.existsById(anyString())).thenReturn(true);
+        when(addressRepository.findById(anyString())).thenReturn(Optional.of(wrongAddress));
+
+        // Act & Assert
+        assertThatThrownBy(() -> addressService.setAddressAsDefault(ADDRESS_ID, CUSTOMER_ID))
+                .isInstanceOf(NotFoundException.class)
+                .hasMessageContaining("Address " + ADDRESS_ID + " does not belong to customer " + CUSTOMER_ID);
+
+        verify(customerRepository, times(1)).existsById(CUSTOMER_ID);
+        verify(addressRepository, times(1)).findById(ADDRESS_ID);
+    }
+
+    @Test
+    void deleteAddress_WhenAddressExists_ShouldDeleteAddress() {
+        // Arrange
+        when(addressRepository.findById(anyString())).thenReturn(Optional.of(address));
+        doNothing().when(addressRepository).deleteById(anyString());
+
+        // Act
+        addressService.deleteAddress(ADDRESS_ID);
+
+        // Assert
+        verify(addressRepository, times(1)).findById(ADDRESS_ID);
+        verify(addressRepository, times(1)).deleteById(ADDRESS_ID);
+    }
+
+    @Test
+    void deleteAddress_WhenAddressDoesNotExist_ShouldThrowNotFoundException() {
+        // Arrange
+        when(addressRepository.findById(anyString())).thenReturn(Optional.empty());
+
+        // Act & Assert
+        assertThatThrownBy(() -> addressService.deleteAddress(ADDRESS_ID))
+                .isInstanceOf(NotFoundException.class)
+                .hasMessageContaining("Address with id '" + ADDRESS_ID + "' not found");
+
+        verify(addressRepository, times(1)).findById(ADDRESS_ID);
+        verify(addressRepository, never()).deleteById(anyString());
+    }
+
+    @Test
+    void findAddressesByCity_WhenCustomerExists_ShouldReturnMatchingAddresses() {
+        // Arrange
+        String city = "Anytown";
+        List<Address> addresses = List.of(address);
+        List<AddressDto> addressDtos = List.of(addressDto);
+
+        when(customerRepository.existsById(anyString())).thenReturn(true);
+        when(addressRepository.findByCustomerIdAndCity(anyString(), anyString())).thenReturn(addresses);
+        when(addressMapper.toDtoList(any())).thenReturn(addressDtos);
+
+        // Act
+        List<AddressDto> result = addressService.findAddressesByCity(CUSTOMER_ID, city);
+
+        // Assert
+        assertThat(result).isNotNull();
+        assertThat(result.size()).isEqualTo(1);
+        assertThat(result.get(0).getCity()).isEqualTo(city);
+        verify(customerRepository, times(1)).existsById(CUSTOMER_ID);
+        verify(addressRepository, times(1)).findByCustomerIdAndCity(CUSTOMER_ID, city);
+        verify(addressMapper, times(1)).toDtoList(addresses);
+    }
+
+    @Test
+    void deleteAddressesByCustomerId_ShouldDeleteAllCustomerAddresses() {
+        // Arrange
+        doNothing().when(addressRepository).deleteByCustomerId(anyString());
+
+        // Act
+        addressService.deleteAddressesByCustomerId(CUSTOMER_ID);
+
+        // Assert
+        verify(addressRepository, times(1)).deleteByCustomerId(CUSTOMER_ID);
+    }
+}
