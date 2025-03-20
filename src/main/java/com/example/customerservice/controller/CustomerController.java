@@ -1,72 +1,157 @@
 package com.example.customerservice.controller;
 
-import com.example.customerservice.dto.CustomerDto;
-import com.example.customerservice.service.CustomerService;
-import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.Parameter;
-import io.swagger.v3.oas.annotations.tags.Tag;
-import jakarta.validation.Valid;
-import lombok.RequiredArgsConstructor;
+import java.net.URI;
+import java.util.List;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
-import java.util.List;
+import com.example.customerservice.dto.CustomerDto;
+import com.example.customerservice.service.CustomerService;
+
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
+
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
 
 @RestController
 @RequestMapping("/customers")
 @RequiredArgsConstructor
-@Tag(name = "Customer", description = "Customer management API")
+@Tag(name = "Customer", description = "Customer management endpoints")
 public class CustomerController {
 
     private final CustomerService customerService;
 
+    @Operation(summary = "Create a new customer")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "201", description = "Customer created", 
+                content = @Content(schema = @Schema(implementation = CustomerDto.class))),
+        @ApiResponse(responseCode = "400", description = "Invalid input"),
+        @ApiResponse(responseCode = "409", description = "Customer already exists")
+    })
     @PostMapping
-    @Operation(summary = "Create a new customer", description = "Creates a new customer with optional addresses")
-    public ResponseEntity<CustomerDto> createCustomer(@Valid @RequestBody CustomerDto customerDto) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(customerService.createCustomer(customerDto));
-    }
-
-    @GetMapping("/{id}")
-    @Operation(summary = "Get customer by ID", description = "Returns a customer by their ID")
-    public ResponseEntity<CustomerDto> getCustomerById(
-            @Parameter(description = "Customer ID", required = true) @PathVariable String id) {
-        return ResponseEntity.ok(customerService.getCustomerById(id));
-    }
-
-    @GetMapping("/email/{email}")
-    @Operation(summary = "Get customer by email", description = "Returns a customer by their email address")
-    public ResponseEntity<CustomerDto> getCustomerByEmail(
-            @Parameter(description = "Customer email", required = true) @PathVariable String email) {
-        return ResponseEntity.ok(customerService.getCustomerByEmail(email));
-    }
-
-    @GetMapping
-    @Operation(summary = "Get all customers or search by name", description = "Returns all customers or filters by first/last name if provided")
-    public ResponseEntity<List<CustomerDto>> getCustomers(
-            @Parameter(description = "First name to search (optional)") @RequestParam(required = false) String firstName,
-            @Parameter(description = "Last name to search (optional)") @RequestParam(required = false) String lastName) {
-        
-        if (firstName != null || lastName != null) {
-            return ResponseEntity.ok(customerService.searchCustomers(firstName, lastName));
-        } else {
-            return ResponseEntity.ok(customerService.getAllCustomers());
-        }
-    }
-
-    @PutMapping("/{id}")
-    @Operation(summary = "Update customer", description = "Updates an existing customer by ID")
-    public ResponseEntity<CustomerDto> updateCustomer(
-            @Parameter(description = "Customer ID", required = true) @PathVariable String id,
+    public ResponseEntity<CustomerDto> createCustomer(
             @Valid @RequestBody CustomerDto customerDto) {
-        return ResponseEntity.ok(customerService.updateCustomer(id, customerDto));
+        
+        CustomerDto createdCustomer = customerService.createCustomer(customerDto);
+        
+        URI location = ServletUriComponentsBuilder
+                .fromCurrentRequest()
+                .path("/{id}")
+                .buildAndExpand(createdCustomer.getId())
+                .toUri();
+        
+        return ResponseEntity.created(location).body(createdCustomer);
     }
 
-    @DeleteMapping("/{id}")
-    @Operation(summary = "Delete customer", description = "Deletes a customer and all their addresses")
-    public ResponseEntity<Void> deleteCustomer(
-            @Parameter(description = "Customer ID", required = true) @PathVariable String id) {
-        customerService.deleteCustomer(id);
-        return ResponseEntity.noContent().build();
+    @Operation(summary = "Get a customer by ID")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Found the customer", 
+                content = @Content(schema = @Schema(implementation = CustomerDto.class))),
+        @ApiResponse(responseCode = "404", description = "Customer not found")
+    })
+    @GetMapping("/{id}")
+    public ResponseEntity<CustomerDto> getCustomerById(
+            @Parameter(description = "Customer ID") @PathVariable String id) {
+        
+        CustomerDto customer = customerService.getCustomerById(id);
+        return ResponseEntity.ok(customer);
     }
-} 
+
+    @Operation(summary = "Get a customer by email")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Found the customer", 
+                content = @Content(schema = @Schema(implementation = CustomerDto.class))),
+        @ApiResponse(responseCode = "404", description = "Customer not found")
+    })
+    @GetMapping("/email/{email}")
+    public ResponseEntity<CustomerDto> getCustomerByEmail(
+            @Parameter(description = "Customer email") @PathVariable String email) {
+        
+        CustomerDto customer = customerService.getCustomerByEmail(email);
+        return ResponseEntity.ok(customer);
+    }
+
+    @Operation(summary = "Update a customer")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Customer updated", 
+                content = @Content(schema = @Schema(implementation = CustomerDto.class))),
+        @ApiResponse(responseCode = "400", description = "Invalid input"),
+        @ApiResponse(responseCode = "404", description = "Customer not found"),
+        @ApiResponse(responseCode = "409", description = "Email already in use")
+    })
+    @PutMapping("/{id}")
+    public ResponseEntity<CustomerDto> updateCustomer(
+            @Parameter(description = "Customer ID") @PathVariable String id,
+            @Valid @RequestBody CustomerDto customerDto) {
+        
+        CustomerDto updatedCustomer = customerService.updateCustomer(id, customerDto);
+        return ResponseEntity.ok(updatedCustomer);
+    }
+
+    @Operation(summary = "Delete a customer")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "204", description = "Customer deleted"),
+        @ApiResponse(responseCode = "404", description = "Customer not found")
+    })
+    @DeleteMapping("/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteCustomer(
+            @Parameter(description = "Customer ID") @PathVariable String id) {
+        
+        customerService.deleteCustomer(id);
+    }
+
+    @Operation(summary = "Get all customers")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "List of customers returned")
+    })
+    @GetMapping
+    public ResponseEntity<List<CustomerDto>> getAllCustomers() {
+        List<CustomerDto> customers = customerService.getAllCustomers();
+        return ResponseEntity.ok(customers);
+    }
+
+    @Operation(summary = "Search customers by first name")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "List of matching customers returned")
+    })
+    @GetMapping("/search/firstname")
+    public ResponseEntity<List<CustomerDto>> searchByFirstName(
+            @Parameter(description = "First name to search for") 
+            @RequestParam String firstName) {
+        
+        List<CustomerDto> customers = customerService.findCustomersByFirstName(firstName);
+        return ResponseEntity.ok(customers);
+    }
+
+    @Operation(summary = "Search customers by last name")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "List of matching customers returned")
+    })
+    @GetMapping("/search/lastname")
+    public ResponseEntity<List<CustomerDto>> searchByLastName(
+            @Parameter(description = "Last name to search for") 
+            @RequestParam String lastName) {
+        
+        List<CustomerDto> customers = customerService.findCustomersByLastName(lastName);
+        return ResponseEntity.ok(customers);
+    }
+}
