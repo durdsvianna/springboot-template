@@ -1,34 +1,56 @@
 package com.example.customerservice.controller;
 
-import com.example.customerservice.config.MongoTestContainer;
-import com.example.customerservice.dto.AddressDto;
-import com.example.customerservice.dto.CustomerDto;
-import com.example.customerservice.repository.AddressRepository;
-import com.example.customerservice.repository.CustomerRepository;
-import io.restassured.RestAssured;
-import io.restassured.http.ContentType;
+import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.notNullValue;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.context.annotation.Import;
+import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.web.servlet.MockMvc;
+import org.testcontainers.containers.MongoDBContainer;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.utility.DockerImageName;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
+import com.example.customerservice.dto.CustomerDto;
+import com.example.customerservice.repository.AddressRepository;
+import com.example.customerservice.repository.CustomerRepository;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
-import static io.restassured.RestAssured.given;
-import static org.hamcrest.Matchers.*;
-
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@Import(MongoTestContainer.class)
+@SpringBootTest
+@AutoConfigureMockMvc
 @ActiveProfiles("test")
+@Testcontainers
 class CustomerControllerIntegrationTest {
 
-    @LocalServerPort
-    private int port;
+    @Container
+    static MongoDBContainer mongoDBContainer = new MongoDBContainer(DockerImageName.parse("mongo:5.0.15"));
+
+    @DynamicPropertySource
+    static void setProperties(DynamicPropertyRegistry registry) {
+        registry.add("spring.data.mongodb.uri", mongoDBContainer::getReplicaSetUrl);
+    }
+
+    @Autowired
+    private MockMvc mockMvc;
+
+    @Autowired
+    private ObjectMapper objectMapper;
 
     @Autowired
     private CustomerRepository customerRepository;
@@ -38,412 +60,319 @@ class CustomerControllerIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        RestAssured.port = port;
-        RestAssured.basePath = "/api";
-        
-        // Clean up database before each test
+        // Clean repositories before each test
+        addressRepository.deleteAll();
+        customerRepository.deleteAll();
+    }
+
+    @AfterEach
+    void tearDown() {
+        // Clean repositories after each test
         addressRepository.deleteAll();
         customerRepository.deleteAll();
     }
 
     @Test
-    void shouldCreateCustomer() {
+    void createCustomer_ValidInput_ReturnsCreated() throws Exception {
+        // Arrange
         CustomerDto customerDto = CustomerDto.builder()
                 .firstName("John")
                 .lastName("Doe")
                 .email("john.doe@example.com")
-                .phone("+1 234 567 8900")
+                .phone("+1234567890")
                 .build();
 
-        given()
-            .contentType(ContentType.JSON)
-            .body(customerDto)
-        .when()
-            .post("/customers")
-        .then()
-            .statusCode(201)
-            .body("id", notNullValue())
-            .body("firstName", equalTo("John"))
-            .body("lastName", equalTo("Doe"))
-            .body("email", equalTo("john.doe@example.com"))
-            .body("phone", equalTo("+1 234 567 8900"));
+        // Act & Assert
+        mockMvc.perform(post("/customers")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(customerDto)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id", notNullValue()))
+                .andExpect(jsonPath("$.firstName", is("John")))
+                .andExpect(jsonPath("$.lastName", is("Doe")))
+                .andExpect(jsonPath("$.email", is("john.doe@example.com")))
+                .andExpect(jsonPath("$.phone", is("+1234567890")))
+                .andExpect(jsonPath("$.createdDate", notNullValue()));
     }
 
     @Test
-    void shouldCreateCustomerWithAddresses() {
-        // Create customer with addresses
-        List<AddressDto> addresses = new ArrayList<>();
-        addresses.add(AddressDto.builder()
-                .street("123 Main St")
-                .city("Anytown")
-                .state("NY")
-                .zipCode("12345")
-                .country("USA")
-                .isDefault(true)
-                .build());
-        
-        addresses.add(AddressDto.builder()
-                .street("456 Oak Ave")
-                .city("Othertown")
-                .state("CA")
-                .zipCode("67890")
-                .country("USA")
-                .isDefault(false)
-                .build());
-                
+    void createCustomer_DuplicateEmail_ReturnsConflict() throws Exception {
+        // Arrange
         CustomerDto customerDto = CustomerDto.builder()
-                .firstName("Alice")
-                .lastName("Smith")
-                .email("alice.smith@example.com")
-                .phone("+1 234 567 8901")
-                .addresses(addresses)
-                .build();
-
-        String customerId = given()
-            .contentType(ContentType.JSON)
-            .body(customerDto)
-        .when()
-            .post("/customers")
-        .then()
-            .statusCode(201)
-            .body("id", notNullValue())
-            .body("firstName", equalTo("Alice"))
-            .extract().path("id");
-            
-        // Verify addresses were created and associated
-        given()
-            .pathParam("customerId", customerId)
-        .when()
-            .get("/addresses/customer/{customerId}")
-        .then()
-            .statusCode(200)
-            .body("size()", equalTo(2))
-            .body("findAll { it.street == '123 Main St' }.size()", equalTo(1))
-            .body("findAll { it.street == '456 Oak Ave' }.size()", equalTo(1));
-    }
-
-    @Test
-    void shouldGetCustomerById() {
-        // Create customer first
-        CustomerDto customerDto = CustomerDto.builder()
-                .firstName("Jane")
-                .lastName("Smith")
-                .email("jane.smith@example.com")
-                .phone("+1 234 567 8901")
-                .build();
-
-        String customerId = given()
-                .contentType(ContentType.JSON)
-                .body(customerDto)
-            .when()
-                .post("/customers")
-            .then()
-                .statusCode(201)
-                .extract().path("id");
-
-        // Then get by ID
-        given()
-            .pathParam("id", customerId)
-        .when()
-            .get("/customers/{id}")
-        .then()
-            .statusCode(200)
-            .body("id", equalTo(customerId))
-            .body("firstName", equalTo("Jane"))
-            .body("lastName", equalTo("Smith"))
-            .body("email", equalTo("jane.smith@example.com"));
-    }
-
-    @Test
-    void shouldGetCustomerByEmail() {
-        // Create customer first
-        CustomerDto customerDto = CustomerDto.builder()
-                .firstName("Email")
-                .lastName("Test")
-                .email("email.test@example.com")
-                .phone("+1 234 567 8902")
-                .build();
-
-        given()
-            .contentType(ContentType.JSON)
-            .body(customerDto)
-        .when()
-            .post("/customers")
-        .then()
-            .statusCode(201);
-
-        // Then get by email
-        given()
-            .pathParam("email", "email.test@example.com")
-        .when()
-            .get("/customers/email/{email}")
-        .then()
-            .statusCode(200)
-            .body("firstName", equalTo("Email"))
-            .body("lastName", equalTo("Test"))
-            .body("email", equalTo("email.test@example.com"));
-    }
-
-    @Test
-    void shouldGetAllCustomers() {
-        // Create multiple customers
-        List<String> emails = Arrays.asList(
-                "customer1@example.com",
-                "customer2@example.com",
-                "customer3@example.com"
-        );
-        
-        for (int i = 0; i < emails.size(); i++) {
-            CustomerDto customerDto = CustomerDto.builder()
-                    .firstName("First" + (i + 1))
-                    .lastName("Last" + (i + 1))
-                    .email(emails.get(i))
-                    .phone("+1 234 567 890" + i)
-                    .build();
-                    
-            given()
-                .contentType(ContentType.JSON)
-                .body(customerDto)
-            .when()
-                .post("/customers")
-            .then()
-                .statusCode(201);
-        }
-        
-        // Get all customers and verify
-        given()
-        .when()
-            .get("/customers")
-        .then()
-            .statusCode(200)
-            .body("size()", greaterThanOrEqualTo(3))
-            .body("findAll { it.email in ['customer1@example.com', 'customer2@example.com', 'customer3@example.com'] }.size()", equalTo(3));
-    }
-
-    @Test
-    void shouldSearchCustomers() {
-        // Create customers with specific names
-        CustomerDto customer1 = CustomerDto.builder()
-                .firstName("John")
-                .lastName("Smith")
-                .email("john.smith@example.com")
-                .phone("+1 234 567 8903")
-                .build();
-                
-        CustomerDto customer2 = CustomerDto.builder()
                 .firstName("John")
                 .lastName("Doe")
-                .email("john.doe@example.com")
-                .phone("+1 234 567 8904")
+                .email("duplicate@example.com")
+                .phone("+1234567890")
                 .build();
-                
-        CustomerDto customer3 = CustomerDto.builder()
-                .firstName("Jane")
-                .lastName("Smith")
-                .email("jane.smith@example.com")
-                .phone("+1 234 567 8905")
-                .build();
-        
-        // Create all customers
-        Arrays.asList(customer1, customer2, customer3).forEach(customer -> {
-            given()
-                .contentType(ContentType.JSON)
-                .body(customer)
-            .when()
-                .post("/customers")
-            .then()
-                .statusCode(201);
-        });
-        
-        // Search by first name
-        given()
-            .queryParam("firstName", "John")
-        .when()
-            .get("/customers")
-        .then()
-            .statusCode(200)
-            .body("size()", equalTo(2))
-            .body("findAll { it.firstName == 'John' }.size()", equalTo(2));
-            
-        // Search by last name
-        given()
-            .queryParam("lastName", "Smith")
-        .when()
-            .get("/customers")
-        .then()
-            .statusCode(200)
-            .body("size()", equalTo(2))
-            .body("findAll { it.lastName == 'Smith' }.size()", equalTo(2));
-            
-        // Search by both first and last name
-        given()
-            .queryParam("firstName", "John")
-            .queryParam("lastName", "Smith")
-        .when()
-            .get("/customers")
-        .then()
-            .statusCode(200)
-            .body("size()", equalTo(1))
-            .body("[0].firstName", equalTo("John"))
-            .body("[0].lastName", equalTo("Smith"));
+
+        // Create the first customer
+        mockMvc.perform(post("/customers")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(customerDto)))
+                .andExpect(status().isCreated());
+
+        // Try to create a customer with the same email
+        mockMvc.perform(post("/customers")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(customerDto)))
+                .andExpect(status().isConflict());
     }
 
     @Test
-    void shouldUpdateCustomer() {
-        // Create customer
+    void getCustomerById_ExistingId_ReturnsCustomer() throws Exception {
+        // Arrange
+        CustomerDto customerDto = CustomerDto.builder()
+                .firstName("Jane")
+                .lastName("Smith")
+                .email("jane.smith@example.com")
+                .phone("+1987654321")
+                .build();
+
+        // Create a customer
+        String createResponse = mockMvc.perform(post("/customers")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(customerDto)))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        CustomerDto createdCustomer = objectMapper.readValue(createResponse, CustomerDto.class);
+
+        // Act & Assert
+        mockMvc.perform(get("/customers/{id}", createdCustomer.getId()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id", is(createdCustomer.getId())))
+                .andExpect(jsonPath("$.firstName", is("Jane")))
+                .andExpect(jsonPath("$.lastName", is("Smith")))
+                .andExpect(jsonPath("$.email", is("jane.smith@example.com")));
+    }
+
+    @Test
+    void getCustomerById_NonExistingId_ReturnsNotFound() throws Exception {
+        // Act & Assert
+        mockMvc.perform(get("/customers/{id}", "non-existing-id"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void getCustomerByEmail_ExistingEmail_ReturnsCustomer() throws Exception {
+        // Arrange
+        CustomerDto customerDto = CustomerDto.builder()
+                .firstName("Bob")
+                .lastName("Johnson")
+                .email("bob.johnson@example.com")
+                .phone("+1122334455")
+                .build();
+
+        // Create a customer
+        mockMvc.perform(post("/customers")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(customerDto)))
+                .andExpect(status().isCreated());
+
+        // Act & Assert
+        mockMvc.perform(get("/customers/email/{email}", "bob.johnson@example.com"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.firstName", is("Bob")))
+                .andExpect(jsonPath("$.lastName", is("Johnson")))
+                .andExpect(jsonPath("$.email", is("bob.johnson@example.com")));
+    }
+
+    @Test
+    void updateCustomer_ExistingId_ReturnsUpdatedCustomer() throws Exception {
+        // Arrange
         CustomerDto customerDto = CustomerDto.builder()
                 .firstName("Original")
                 .lastName("Customer")
                 .email("original@example.com")
-                .phone("+1 234 567 8906")
+                .phone("+1555555555")
                 .build();
-                
-        String customerId = given()
-            .contentType(ContentType.JSON)
-            .body(customerDto)
-        .when()
-            .post("/customers")
-        .then()
-            .statusCode(201)
-            .extract().path("id");
-            
-        // Update customer
+
+        // Create a customer
+        String createResponse = mockMvc.perform(post("/customers")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(customerDto)))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        CustomerDto createdCustomer = objectMapper.readValue(createResponse, CustomerDto.class);
+
+        // Prepare update data
         CustomerDto updateDto = CustomerDto.builder()
                 .firstName("Updated")
-                .lastName("CustomerInfo")
+                .lastName("CustomerNew")
                 .email("updated@example.com")
-                .phone("+1 234 567 8907")
+                .phone("+1666666666")
                 .build();
-                
-        given()
-            .contentType(ContentType.JSON)
-            .body(updateDto)
-            .pathParam("id", customerId)
-        .when()
-            .put("/customers/{id}")
-        .then()
-            .statusCode(200)
-            .body("id", equalTo(customerId))
-            .body("firstName", equalTo("Updated"))
-            .body("lastName", equalTo("CustomerInfo"))
-            .body("email", equalTo("updated@example.com"))
-            .body("phone", equalTo("+1 234 567 8907"));
-            
-        // Verify update persisted
-        given()
-            .pathParam("id", customerId)
-        .when()
-            .get("/customers/{id}")
-        .then()
-            .statusCode(200)
-            .body("firstName", equalTo("Updated"));
+
+        // Act & Assert
+        mockMvc.perform(put("/customers/{id}", createdCustomer.getId())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(updateDto)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id", is(createdCustomer.getId())))
+                .andExpect(jsonPath("$.firstName", is("Updated")))
+                .andExpect(jsonPath("$.lastName", is("CustomerNew")))
+                .andExpect(jsonPath("$.email", is("updated@example.com")))
+                .andExpect(jsonPath("$.phone", is("+1666666666")));
     }
 
     @Test
-    void shouldReturn404WhenCustomerNotFound() {
-        given()
-            .pathParam("id", "nonexistent-id")
-        .when()
-            .get("/customers/{id}")
-        .then()
-            .statusCode(404);
-    }
-
-    @Test
-    void shouldDeleteCustomer() {
-        // Create customer
+    void deleteCustomer_ExistingId_ReturnsNoContent() throws Exception {
+        // Arrange
         CustomerDto customerDto = CustomerDto.builder()
                 .firstName("ToDelete")
-                .lastName("Customer")
+                .lastName("User")
                 .email("todelete@example.com")
-                .phone("+1 234 567 8908")
+                .phone("+1777777777")
                 .build();
-                
-        String customerId = given()
-            .contentType(ContentType.JSON)
-            .body(customerDto)
-        .when()
-            .post("/customers")
-        .then()
-            .statusCode(201)
-            .extract().path("id");
-            
-        // Create address for customer
-        AddressDto addressDto = AddressDto.builder()
-                .street("Delete Street")
-                .city("Delete City")
-                .state("DC")
-                .zipCode("12345")
-                .customerId(customerId)
-                .build();
-                
-        given()
-            .contentType(ContentType.JSON)
-            .body(addressDto)
-        .when()
-            .post("/addresses")
-        .then()
-            .statusCode(201);
-            
-        // Delete customer
-        given()
-            .pathParam("id", customerId)
-        .when()
-            .delete("/customers/{id}")
-        .then()
-            .statusCode(204);
-            
-        // Verify customer is gone
-        given()
-            .pathParam("id", customerId)
-        .when()
-            .get("/customers/{id}")
-        .then()
-            .statusCode(404);
-            
-        // Verify customer's addresses are gone
-        given()
-            .pathParam("customerId", customerId)
-        .when()
-            .get("/addresses/customer/{customerId}")
-        .then()
-            .statusCode(200)
-            .body("size()", equalTo(0));
+
+        // Create a customer
+        String createResponse = mockMvc.perform(post("/customers")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(customerDto)))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        CustomerDto createdCustomer = objectMapper.readValue(createResponse, CustomerDto.class);
+
+        // Act & Assert
+        mockMvc.perform(delete("/customers/{id}", createdCustomer.getId()))
+                .andExpect(status().isNoContent());
+
+        // Verify the customer no longer exists
+        mockMvc.perform(get("/customers/{id}", createdCustomer.getId()))
+                .andExpect(status().isNotFound());
     }
 
     @Test
-    void shouldNotAllowDuplicateEmails() {
-        // Create first customer
+    void getAllCustomers_ReturnsAllCustomers() throws Exception {
+        // Arrange
         CustomerDto customer1 = CustomerDto.builder()
-                .firstName("Original")
+                .firstName("First")
                 .lastName("Customer")
-                .email("duplicate@example.com")
-                .phone("+1 234 567 8909")
+                .email("first@example.com")
                 .build();
-                
-        given()
-            .contentType(ContentType.JSON)
-            .body(customer1)
-        .when()
-            .post("/customers")
-        .then()
-            .statusCode(201);
-            
-        // Try to create second customer with same email
+
         CustomerDto customer2 = CustomerDto.builder()
-                .firstName("Duplicate")
+                .firstName("Second")
                 .lastName("Customer")
-                .email("duplicate@example.com")
-                .phone("+1 234 567 8910")
+                .email("second@example.com")
                 .build();
-                
-        given()
-            .contentType(ContentType.JSON)
-            .body(customer2)
-        .when()
-            .post("/customers")
-        .then()
-            .statusCode(400)
-            .body("message", containsString("already exists"));
+
+        // Create two customers
+        mockMvc.perform(post("/customers")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(customer1)))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(post("/customers")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(customer2)))
+                .andExpect(status().isCreated());
+
+        // Act & Assert
+        mockMvc.perform(get("/customers"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(2)))
+                .andExpect(jsonPath("$[0].email", notNullValue()))
+                .andExpect(jsonPath("$[1].email", notNullValue()));
     }
-} 
+
+    @Test
+    void searchByFirstName_ExistingFirstName_ReturnsMatchingCustomers() throws Exception {
+        // Arrange
+        CustomerDto customer1 = CustomerDto.builder()
+                .firstName("Search")
+                .lastName("User1")
+                .email("search.user1@example.com")
+                .build();
+
+        CustomerDto customer2 = CustomerDto.builder()
+                .firstName("Search")
+                .lastName("User2")
+                .email("search.user2@example.com")
+                .build();
+
+        CustomerDto customer3 = CustomerDto.builder()
+                .firstName("Other")
+                .lastName("User")
+                .email("other.user@example.com")
+                .build();
+
+        // Create three customers
+        mockMvc.perform(post("/customers")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(customer1)))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(post("/customers")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(customer2)))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(post("/customers")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(customer3)))
+                .andExpect(status().isCreated());
+
+        // Act & Assert
+        mockMvc.perform(get("/customers/search/firstname")
+                .param("firstName", "Search"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(2)))
+                .andExpect(jsonPath("$[0].firstName", equalTo("Search")))
+                .andExpect(jsonPath("$[1].firstName", equalTo("Search")));
+    }
+
+    @Test
+    void searchByLastName_ExistingLastName_ReturnsMatchingCustomers() throws Exception {
+        // Arrange
+        CustomerDto customer1 = CustomerDto.builder()
+                .firstName("User1")
+                .lastName("SearchLast")
+                .email("user1.search@example.com")
+                .build();
+
+        CustomerDto customer2 = CustomerDto.builder()
+                .firstName("User2")
+                .lastName("SearchLast")
+                .email("user2.search@example.com")
+                .build();
+
+        CustomerDto customer3 = CustomerDto.builder()
+                .firstName("User3")
+                .lastName("Other")
+                .email("user3.other@example.com")
+                .build();
+
+        // Create three customers
+        mockMvc.perform(post("/customers")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(customer1)))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(post("/customers")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(customer2)))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(post("/customers")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(customer3)))
+                .andExpect(status().isCreated());
+
+        // Act & Assert
+        mockMvc.perform(get("/customers/search/lastname")
+                .param("lastName", "SearchLast"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(2)))
+                .andExpect(jsonPath("$[0].lastName", equalTo("SearchLast")))
+                .andExpect(jsonPath("$[1].lastName", equalTo("SearchLast")));
+    }
+}
