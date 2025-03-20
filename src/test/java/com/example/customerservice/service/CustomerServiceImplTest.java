@@ -1,10 +1,19 @@
 package com.example.customerservice.service;
 
-import com.example.customerservice.dto.AddressDto;
-import com.example.customerservice.dto.CustomerDto;
-import com.example.customerservice.model.Customer;
-import com.example.customerservice.repository.CustomerRepository;
-import com.example.customerservice.service.impl.CustomerServiceImpl;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+import java.util.Arrays;
+import java.util.List;
+import java.util.Optional;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -12,12 +21,13 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.time.LocalDateTime;
-import java.util.*;
-
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.*;
+import com.example.customerservice.dto.CustomerDto;
+import com.example.customerservice.exception.DuplicateResourceException;
+import com.example.customerservice.exception.NotFoundException;
+import com.example.customerservice.mapper.CustomerMapper;
+import com.example.customerservice.model.Customer;
+import com.example.customerservice.repository.CustomerRepository;
+import com.example.customerservice.service.impl.CustomerServiceImpl;
 
 @ExtendWith(MockitoExtension.class)
 class CustomerServiceImplTest {
@@ -26,245 +36,261 @@ class CustomerServiceImplTest {
     private CustomerRepository customerRepository;
 
     @Mock
+    private CustomerMapper customerMapper;
+
+    @Mock
     private AddressService addressService;
 
     @InjectMocks
     private CustomerServiceImpl customerService;
 
-    private Customer testCustomer;
-    private CustomerDto testCustomerDto;
-    private AddressDto testAddressDto;
-    private List<AddressDto> addressList;
+    private Customer customer;
+    private CustomerDto customerDto;
+    private final String CUSTOMER_ID = "64a1db45e7cb171cddc52804";
 
     @BeforeEach
     void setUp() {
-        testCustomer = Customer.builder()
-                .id("1")
-                .firstName("John")
-                .lastName("Doe")
-                .email("john.doe@example.com")
-                .phone("+1234567890")
-                .createdAt(LocalDateTime.now())
-                .updatedAt(LocalDateTime.now())
-                .addressIds(new ArrayList<>(Arrays.asList("addr1")))
-                .build();
-
-        testCustomerDto = CustomerDto.builder()
-                .id("1")
+        customer = Customer.builder()
+                .id(CUSTOMER_ID)
                 .firstName("John")
                 .lastName("Doe")
                 .email("john.doe@example.com")
                 .phone("+1234567890")
                 .build();
 
-        testAddressDto = AddressDto.builder()
-                .id("addr1")
-                .street("123 Main St")
-                .city("Anytown")
-                .state("NY")
-                .zipCode("12345")
-                .customerId("1")
-                .isDefault(true)
+        customerDto = CustomerDto.builder()
+                .id(CUSTOMER_ID)
+                .firstName("John")
+                .lastName("Doe")
+                .email("john.doe@example.com")
+                .phone("+1234567890")
                 .build();
-
-        addressList = new ArrayList<>();
-        addressList.add(testAddressDto);
     }
 
     @Test
-    void createCustomer_ShouldCreateCustomerWithoutAddresses() {
-        // Given
+    void createCustomer_WhenEmailIsUnique_ShouldReturnCustomerDto() {
+        // Arrange
         when(customerRepository.existsByEmail(anyString())).thenReturn(false);
-        when(customerRepository.save(any(Customer.class))).thenReturn(testCustomer);
+        when(customerMapper.toEntity(any(CustomerDto.class))).thenReturn(customer);
+        when(customerRepository.save(any(Customer.class))).thenReturn(customer);
+        when(customerMapper.toDto(any(Customer.class))).thenReturn(customerDto);
 
-        // When
-        CustomerDto result = customerService.createCustomer(testCustomerDto);
+        // Act
+        CustomerDto result = customerService.createCustomer(customerDto);
 
-        // Then
-        assertNotNull(result);
-        assertEquals(testCustomer.getId(), result.getId());
-        assertEquals(testCustomer.getFirstName(), result.getFirstName());
-        assertEquals(testCustomer.getEmail(), result.getEmail());
-        verify(customerRepository).existsByEmail(testCustomerDto.getEmail());
-        verify(customerRepository).save(any(Customer.class));
+        // Assert
+        assertThat(result).isNotNull();
+        assertThat(result.getId()).isEqualTo(CUSTOMER_ID);
+        assertThat(result.getEmail()).isEqualTo("john.doe@example.com");
+        verify(customerRepository, times(1)).existsByEmail(customerDto.getEmail());
+        verify(customerMapper, times(1)).toEntity(customerDto);
+        verify(customerRepository, times(1)).save(customer);
+        verify(customerMapper, times(1)).toDto(customer);
     }
 
     @Test
-    void createCustomer_WithExistingEmail_ShouldThrowException() {
-        // Given
+    void createCustomer_WhenEmailExists_ShouldThrowDuplicateResourceException() {
+        // Arrange
         when(customerRepository.existsByEmail(anyString())).thenReturn(true);
 
-        // When & Then
-        IllegalArgumentException exception = assertThrows(
-                IllegalArgumentException.class,
-                () -> customerService.createCustomer(testCustomerDto)
-        );
-        assertTrue(exception.getMessage().contains("already exists"));
+        // Act & Assert
+        assertThatThrownBy(() -> customerService.createCustomer(customerDto))
+                .isInstanceOf(DuplicateResourceException.class)
+                .hasMessageContaining("Customer with email 'john.doe@example.com' already exists");
+
+        verify(customerRepository, times(1)).existsByEmail(customerDto.getEmail());
+        verify(customerMapper, never()).toEntity(any(CustomerDto.class));
         verify(customerRepository, never()).save(any(Customer.class));
     }
 
     @Test
-    void createCustomer_WithAddresses_ShouldCreateCustomerAndAddresses() {
-        // Given
-        testCustomerDto.setAddresses(addressList);
-        when(customerRepository.existsByEmail(anyString())).thenReturn(false);
-        when(customerRepository.save(any(Customer.class))).thenReturn(testCustomer);
-        when(addressService.createAddress(any(AddressDto.class))).thenReturn(testAddressDto);
+    void getCustomerById_WhenCustomerExists_ShouldReturnCustomerDto() {
+        // Arrange
+        when(customerRepository.findById(anyString())).thenReturn(Optional.of(customer));
+        when(customerMapper.toDto(any(Customer.class))).thenReturn(customerDto);
 
-        // When
-        CustomerDto result = customerService.createCustomer(testCustomerDto);
+        // Act
+        CustomerDto result = customerService.getCustomerById(CUSTOMER_ID);
 
-        // Then
-        assertNotNull(result);
-        verify(addressService).createAddress(any(AddressDto.class));
-        verify(customerRepository, times(2)).save(any(Customer.class)); // First save and then update with address IDs
+        // Assert
+        assertThat(result).isNotNull();
+        assertThat(result.getId()).isEqualTo(CUSTOMER_ID);
+        verify(customerRepository, times(1)).findById(CUSTOMER_ID);
+        verify(customerMapper, times(1)).toDto(customer);
     }
 
     @Test
-    void getCustomerById_ShouldReturnCustomer() {
-        // Given
-        when(customerRepository.findById(anyString())).thenReturn(Optional.of(testCustomer));
-        when(addressService.getAddressesByCustomerId(anyString())).thenReturn(addressList);
-
-        // When
-        CustomerDto result = customerService.getCustomerById("1");
-
-        // Then
-        assertNotNull(result);
-        assertEquals(testCustomer.getId(), result.getId());
-        assertEquals(testCustomer.getEmail(), result.getEmail());
-        assertNotNull(result.getAddresses());
-        verify(customerRepository).findById("1");
-        verify(addressService).getAddressesByCustomerId("1");
-    }
-
-    @Test
-    void getCustomerById_WithNonExistentId_ShouldThrowException() {
-        // Given
+    void getCustomerById_WhenCustomerDoesNotExist_ShouldThrowNotFoundException() {
+        // Arrange
         when(customerRepository.findById(anyString())).thenReturn(Optional.empty());
 
-        // When & Then
-        assertThrows(NoSuchElementException.class, () -> customerService.getCustomerById("nonexistent"));
-        verify(customerRepository).findById("nonexistent");
+        // Act & Assert
+        assertThatThrownBy(() -> customerService.getCustomerById(CUSTOMER_ID))
+                .isInstanceOf(NotFoundException.class)
+                .hasMessageContaining("Customer with id '" + CUSTOMER_ID + "' not found");
+
+        verify(customerRepository, times(1)).findById(CUSTOMER_ID);
+        verify(customerMapper, never()).toDto(any(Customer.class));
     }
 
     @Test
-    void getCustomerByEmail_ShouldReturnCustomer() {
-        // Given
-        when(customerRepository.findByEmail(anyString())).thenReturn(Optional.of(testCustomer));
-        when(addressService.getAddressesByCustomerId(anyString())).thenReturn(addressList);
+    void getCustomerByEmail_WhenCustomerExists_ShouldReturnCustomerDto() {
+        // Arrange
+        String email = "john.doe@example.com";
+        when(customerRepository.findByEmail(anyString())).thenReturn(Optional.of(customer));
+        when(customerMapper.toDto(any(Customer.class))).thenReturn(customerDto);
 
-        // When
-        CustomerDto result = customerService.getCustomerByEmail("john.doe@example.com");
+        // Act
+        CustomerDto result = customerService.getCustomerByEmail(email);
 
-        // Then
-        assertNotNull(result);
-        assertEquals(testCustomer.getId(), result.getId());
-        assertEquals(testCustomer.getEmail(), result.getEmail());
-        assertNotNull(result.getAddresses());
-        verify(customerRepository).findByEmail("john.doe@example.com");
+        // Assert
+        assertThat(result).isNotNull();
+        assertThat(result.getEmail()).isEqualTo(email);
+        verify(customerRepository, times(1)).findByEmail(email);
+        verify(customerMapper, times(1)).toDto(customer);
     }
 
     @Test
-    void getAllCustomers_ShouldReturnAllCustomers() {
-        // Given
-        List<Customer> customers = Arrays.asList(testCustomer);
-        when(customerRepository.findAll()).thenReturn(customers);
+    void getCustomerByEmail_WhenCustomerDoesNotExist_ShouldThrowNotFoundException() {
+        // Arrange
+        String email = "john.doe@example.com";
+        when(customerRepository.findByEmail(anyString())).thenReturn(Optional.empty());
 
-        // When
-        List<CustomerDto> result = customerService.getAllCustomers();
+        // Act & Assert
+        assertThatThrownBy(() -> customerService.getCustomerByEmail(email))
+                .isInstanceOf(NotFoundException.class)
+                .hasMessageContaining("Customer with email '" + email + "' not found");
 
-        // Then
-        assertNotNull(result);
-        assertEquals(1, result.size());
-        assertEquals(testCustomer.getId(), result.get(0).getId());
+        verify(customerRepository, times(1)).findByEmail(email);
+        verify(customerMapper, never()).toDto(any(Customer.class));
     }
 
     @Test
-    void searchCustomers_ByFirstAndLastName_ShouldReturnMatchingCustomers() {
-        // Given
-        List<Customer> customers = Arrays.asList(testCustomer);
-        when(customerRepository.findByFirstNameContainingIgnoreCaseAndLastNameContainingIgnoreCase(anyString(), anyString()))
-                .thenReturn(customers);
+    void updateCustomer_WhenCustomerExistsAndEmailNotChanged_ShouldReturnUpdatedCustomerDto() {
+        // Arrange
+        when(customerRepository.findById(anyString())).thenReturn(Optional.of(customer));
+        when(customerMapper.updateEntity(any(CustomerDto.class), any(Customer.class))).thenReturn(customer);
+        when(customerRepository.save(any(Customer.class))).thenReturn(customer);
+        when(customerMapper.toDto(any(Customer.class))).thenReturn(customerDto);
 
-        // When
-        List<CustomerDto> result = customerService.searchCustomers("John", "Doe");
+        // Act
+        CustomerDto result = customerService.updateCustomer(CUSTOMER_ID, customerDto);
 
-        // Then
-        assertNotNull(result);
-        assertEquals(1, result.size());
-        assertEquals(testCustomer.getId(), result.get(0).getId());
+        // Assert
+        assertThat(result).isNotNull();
+        assertThat(result.getId()).isEqualTo(CUSTOMER_ID);
+        verify(customerRepository, times(1)).findById(CUSTOMER_ID);
+        verify(customerMapper, times(1)).updateEntity(customerDto, customer);
+        verify(customerRepository, times(1)).save(customer);
+        verify(customerMapper, times(1)).toDto(customer);
     }
 
     @Test
-    void updateCustomer_ShouldUpdateExistingCustomer() {
-        // Given
-        CustomerDto updateDto = CustomerDto.builder()
-                .firstName("Johnny")
-                .lastName("Doe")
-                .email("johnny.doe@example.com")
-                .phone("+1234567890")
-                .build();
+    void updateCustomer_WhenCustomerDoesNotExist_ShouldThrowNotFoundException() {
+        // Arrange
+        when(customerRepository.findById(anyString())).thenReturn(Optional.empty());
 
-        Customer updatedCustomer = Customer.builder()
-                .id("1")
-                .firstName("Johnny")
-                .lastName("Doe")
-                .email("johnny.doe@example.com")
-                .phone("+1234567890")
-                .createdAt(testCustomer.getCreatedAt())
-                .updatedAt(LocalDateTime.now())
-                .addressIds(testCustomer.getAddressIds())
-                .build();
+        // Act & Assert
+        assertThatThrownBy(() -> customerService.updateCustomer(CUSTOMER_ID, customerDto))
+                .isInstanceOf(NotFoundException.class)
+                .hasMessageContaining("Customer with id '" + CUSTOMER_ID + "' not found");
 
-        when(customerRepository.findById(anyString())).thenReturn(Optional.of(testCustomer));
-        when(customerRepository.existsByEmail(anyString())).thenReturn(false);
-        when(customerRepository.save(any(Customer.class))).thenReturn(updatedCustomer);
-        when(addressService.getAddressesByCustomerId(anyString())).thenReturn(addressList);
-
-        // When
-        CustomerDto result = customerService.updateCustomer("1", updateDto);
-
-        // Then
-        assertNotNull(result);
-        assertEquals("Johnny", result.getFirstName());
-        assertEquals("johnny.doe@example.com", result.getEmail());
-        verify(customerRepository).save(any(Customer.class));
-    }
-
-    @Test
-    void updateCustomer_WithExistingEmail_ShouldThrowException() {
-        // Given
-        CustomerDto updateDto = CustomerDto.builder()
-                .firstName("Johnny")
-                .lastName("Doe")
-                .email("existing@example.com") // Different from the customer's current email
-                .phone("+1234567890")
-                .build();
-
-        when(customerRepository.findById(anyString())).thenReturn(Optional.of(testCustomer));
-        when(customerRepository.existsByEmail("existing@example.com")).thenReturn(true);
-
-        // When & Then
-        IllegalArgumentException exception = assertThrows(
-                IllegalArgumentException.class,
-                () -> customerService.updateCustomer("1", updateDto)
-        );
-        assertTrue(exception.getMessage().contains("Email already in use"));
+        verify(customerRepository, times(1)).findById(CUSTOMER_ID);
+        verify(customerMapper, never()).updateEntity(any(CustomerDto.class), any(Customer.class));
         verify(customerRepository, never()).save(any(Customer.class));
     }
 
     @Test
-    void deleteCustomer_ShouldDeleteCustomerAndAddresses() {
-        // Given
-        when(customerRepository.findById(anyString())).thenReturn(Optional.of(testCustomer));
-        doNothing().when(addressService).deleteCustomerAddresses(anyString());
+    void deleteCustomer_WhenCustomerExists_ShouldDeleteCustomerAndAddresses() {
+        // Arrange
+        when(customerRepository.existsById(anyString())).thenReturn(true);
+        doNothing().when(addressService).deleteAddressesByCustomerId(anyString());
+        doNothing().when(customerRepository).deleteById(anyString());
 
-        // When
-        customerService.deleteCustomer("1");
+        // Act
+        customerService.deleteCustomer(CUSTOMER_ID);
 
-        // Then
-        verify(addressService).deleteCustomerAddresses("1");
-        verify(customerRepository).delete(testCustomer);
+        // Assert
+        verify(customerRepository, times(1)).existsById(CUSTOMER_ID);
+        verify(addressService, times(1)).deleteAddressesByCustomerId(CUSTOMER_ID);
+        verify(customerRepository, times(1)).deleteById(CUSTOMER_ID);
     }
-} 
+
+    @Test
+    void deleteCustomer_WhenCustomerDoesNotExist_ShouldThrowNotFoundException() {
+        // Arrange
+        when(customerRepository.existsById(anyString())).thenReturn(false);
+
+        // Act & Assert
+        assertThatThrownBy(() -> customerService.deleteCustomer(CUSTOMER_ID))
+                .isInstanceOf(NotFoundException.class)
+                .hasMessageContaining("Customer with id '" + CUSTOMER_ID + "' not found");
+
+        verify(customerRepository, times(1)).existsById(CUSTOMER_ID);
+        verify(addressService, never()).deleteAddressesByCustomerId(anyString());
+        verify(customerRepository, never()).deleteById(anyString());
+    }
+
+    @Test
+    void getAllCustomers_ShouldReturnListOfCustomerDtos() {
+        // Arrange
+        List<Customer> customers = Arrays.asList(customer, 
+                Customer.builder().id("456").firstName("Jane").lastName("Smith").build());
+        List<CustomerDto> customerDtos = Arrays.asList(customerDto, 
+                CustomerDto.builder().id("456").firstName("Jane").lastName("Smith").build());
+
+        when(customerRepository.findAll()).thenReturn(customers);
+        when(customerMapper.toDtoList(any())).thenReturn(customerDtos);
+
+        // Act
+        List<CustomerDto> result = customerService.getAllCustomers();
+
+        // Assert
+        assertThat(result).isNotNull();
+        assertThat(result.size()).isEqualTo(2);
+        verify(customerRepository, times(1)).findAll();
+        verify(customerMapper, times(1)).toDtoList(customers);
+    }
+
+    @Test
+    void findCustomersByFirstName_ShouldReturnMatchingCustomers() {
+        // Arrange
+        String firstName = "John";
+        List<Customer> customers = List.of(customer);
+        List<CustomerDto> customerDtos = List.of(customerDto);
+
+        when(customerRepository.findByFirstName(anyString())).thenReturn(customers);
+        when(customerMapper.toDtoList(any())).thenReturn(customerDtos);
+
+        // Act
+        List<CustomerDto> result = customerService.findCustomersByFirstName(firstName);
+
+        // Assert
+        assertThat(result).isNotNull();
+        assertThat(result.size()).isEqualTo(1);
+        assertThat(result.get(0).getFirstName()).isEqualTo(firstName);
+        verify(customerRepository, times(1)).findByFirstName(firstName);
+        verify(customerMapper, times(1)).toDtoList(customers);
+    }
+
+    @Test
+    void findCustomersByLastName_ShouldReturnMatchingCustomers() {
+        // Arrange
+        String lastName = "Doe";
+        List<Customer> customers = List.of(customer);
+        List<CustomerDto> customerDtos = List.of(customerDto);
+
+        when(customerRepository.findByLastName(anyString())).thenReturn(customers);
+        when(customerMapper.toDtoList(any())).thenReturn(customerDtos);
+
+        // Act
+        List<CustomerDto> result = customerService.findCustomersByLastName(lastName);
+
+        // Assert
+        assertThat(result).isNotNull();
+        assertThat(result.size()).isEqualTo(1);
+        assertThat(result.get(0).getLastName()).isEqualTo(lastName);
+        verify(customerRepository, times(1)).findByLastName(lastName);
+        verify(customerMapper, times(1)).toDtoList(customers);
+    }
+}
