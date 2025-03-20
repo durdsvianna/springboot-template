@@ -12,12 +12,15 @@
     <artifactId>customer-service</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <name>customer-service</name>
-    <description>Microservice for managing customers and addresses</description>
+    <description>Customer Service Microservice</description>
     
     <properties>
         <java.version>21</java.version>
-        <cucumber.version>7.15.0</cucumber.version>
         <testcontainers.version>1.19.3</testcontainers.version>
+        <cucumber.version>7.15.0</cucumber.version>
+        <rest-assured.version>5.3.2</rest-assured.version>
+        <springdoc.version>2.3.0</springdoc.version>
+        <mapstruct.version>1.5.5.Final</mapstruct.version>
     </properties>
     
     <dependencies>
@@ -28,11 +31,11 @@
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-data-mongodb</artifactId>
+            <artifactId>spring-boot-starter-validation</artifactId>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-validation</artifactId>
+            <artifactId>spring-boot-starter-data-mongodb</artifactId>
         </dependency>
         
         <!-- Lombok -->
@@ -42,19 +45,38 @@
             <optional>true</optional>
         </dependency>
         
-        <!-- Swagger OpenAPI -->
+        <!-- MapStruct for DTO mapping -->
+        <dependency>
+            <groupId>org.mapstruct</groupId>
+            <artifactId>mapstruct</artifactId>
+            <version>${mapstruct.version}</version>
+        </dependency>
+        
+        <!-- SpringDoc OpenAPI -->
         <dependency>
             <groupId>org.springdoc</groupId>
             <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
-            <version>2.3.0</version>
+            <version>${springdoc.version}</version>
         </dependency>
         
-        <!-- Testing -->
+        <!-- Test dependencies -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>mongodb</artifactId>
+            <scope>test</scope>
+        </dependency>
+        
+        <!-- Cucumber for BDD -->
         <dependency>
             <groupId>io.cucumber</groupId>
             <artifactId>cucumber-java</artifactId>
@@ -78,24 +100,27 @@
             <artifactId>junit-platform-suite</artifactId>
             <scope>test</scope>
         </dependency>
+        
+        <!-- REST Assured for API testing -->
         <dependency>
             <groupId>io.rest-assured</groupId>
             <artifactId>rest-assured</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.testcontainers</groupId>
-            <artifactId>junit-jupiter</artifactId>
-            <version>${testcontainers.version}</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.testcontainers</groupId>
-            <artifactId>mongodb</artifactId>
-            <version>${testcontainers.version}</version>
+            <version>${rest-assured.version}</version>
             <scope>test</scope>
         </dependency>
     </dependencies>
+    
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.testcontainers</groupId>
+                <artifactId>testcontainers-bom</artifactId>
+                <version>${testcontainers.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
     
     <build>
         <plugins>
@@ -111,6 +136,26 @@
                     </excludes>
                 </configuration>
             </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <source>${java.version}</source>
+                    <target>${java.version}</target>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                            <version>${lombok.version}</version>
+                        </path>
+                        <path>
+                            <groupId>org.mapstruct</groupId>
+                            <artifactId>mapstruct-processor</artifactId>
+                            <version>${mapstruct.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
         </plugins>
     </build>
-</project> 
+</project>
