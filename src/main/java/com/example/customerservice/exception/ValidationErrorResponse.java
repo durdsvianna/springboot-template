@@ -1,20 +1,22 @@
 package com.example.customerservice.exception;
 
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
-
 import java.time.LocalDateTime;
 import java.util.Map;
 
-@Getter
-@Setter
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+@Data
+@Builder
 @NoArgsConstructor
-public class ValidationErrorResponse extends ErrorResponse {
+@AllArgsConstructor
+public class ValidationErrorResponse {
+    private LocalDateTime timestamp;
+    private int status;
+    private String error;
+    private String message;
+    private String path;
     private Map<String, String> errors;
-    
-    public ValidationErrorResponse(int status, String message, LocalDateTime timestamp, Map<String, String> errors) {
-        super(status, message, timestamp);
-        this.errors = errors;
-    }
-} 
+}
