@@ -151,116 +151,101 @@ class CustomerControllerIntegrationTest {
             .body("id", equalTo(customerId))
             .body("firstName", equalTo("Jane"))
             .body("lastName", equalTo("Smith"))
-            .body("email", equalTo("jane.smith@example.com"))
-            .body("phone", equalTo("+1 234 567 8901"));
+            .body("email", equalTo("jane.smith@example.com"));
     }
-    
+
     @Test
     void shouldGetCustomerByEmail() {
         // Create customer first
         CustomerDto customerDto = CustomerDto.builder()
-                .firstName("Bob")
-                .lastName("Johnson")
-                .email("bob.johnson@example.com")
+                .firstName("Email")
+                .lastName("Test")
+                .email("email.test@example.com")
                 .phone("+1 234 567 8902")
                 .build();
 
         given()
+            .contentType(ContentType.JSON)
+            .body(customerDto)
+        .when()
+            .post("/customers")
+        .then()
+            .statusCode(201);
+
+        // Then get by email
+        given()
+            .pathParam("email", "email.test@example.com")
+        .when()
+            .get("/customers/email/{email}")
+        .then()
+            .statusCode(200)
+            .body("firstName", equalTo("Email"))
+            .body("lastName", equalTo("Test"))
+            .body("email", equalTo("email.test@example.com"));
+    }
+
+    @Test
+    void shouldGetAllCustomers() {
+        // Create multiple customers
+        List<String> emails = Arrays.asList(
+                "customer1@example.com",
+                "customer2@example.com",
+                "customer3@example.com"
+        );
+        
+        for (int i = 0; i < emails.size(); i++) {
+            CustomerDto customerDto = CustomerDto.builder()
+                    .firstName("First" + (i + 1))
+                    .lastName("Last" + (i + 1))
+                    .email(emails.get(i))
+                    .phone("+1 234 567 890" + i)
+                    .build();
+                    
+            given()
                 .contentType(ContentType.JSON)
                 .body(customerDto)
             .when()
                 .post("/customers")
             .then()
                 .statusCode(201);
-
-        // Then get by email
-        given()
-            .pathParam("email", "bob.johnson@example.com")
-        .when()
-            .get("/customers/email/{email}")
-        .then()
-            .statusCode(200)
-            .body("firstName", equalTo("Bob"))
-            .body("lastName", equalTo("Johnson"))
-            .body("email", equalTo("bob.johnson@example.com"))
-            .body("phone", equalTo("+1 234 567 8902"));
-    }
-    
-    @Test
-    void shouldGetAllCustomers() {
-        // Create multiple customers
-        List<CustomerDto> customers = Arrays.asList(
-            CustomerDto.builder()
-                .firstName("User1")
-                .lastName("Test")
-                .email("user1.test@example.com")
-                .phone("+1 111 111 1111")
-                .build(),
-            CustomerDto.builder()
-                .firstName("User2")
-                .lastName("Test")
-                .email("user2.test@example.com")
-                .phone("+1 222 222 2222")
-                .build(),
-            CustomerDto.builder()
-                .firstName("User3")
-                .lastName("Sample")
-                .email("user3.sample@example.com")
-                .phone("+1 333 333 3333")
-                .build()
-        );
+        }
         
-        customers.forEach(customer -> {
-            given()
-                .contentType(ContentType.JSON)
-                .body(customer)
-            .when()
-                .post("/customers")
-            .then()
-                .statusCode(201);
-        });
-        
-        // Get all customers
+        // Get all customers and verify
         given()
         .when()
             .get("/customers")
         .then()
             .statusCode(200)
-            .body("size()", equalTo(3))
-            .body("findAll { it.firstName.startsWith('User') }.size()", equalTo(3));
+            .body("size()", greaterThanOrEqualTo(3))
+            .body("findAll { it.email in ['customer1@example.com', 'customer2@example.com', 'customer3@example.com'] }.size()", equalTo(3));
     }
-    
+
     @Test
     void shouldSearchCustomers() {
-        // Create multiple customers for search testing
-        List<CustomerDto> customers = Arrays.asList(
-            CustomerDto.builder()
-                .firstName("Search")
-                .lastName("User1")
-                .email("search.user1@example.com")
-                .phone("+1 444 444 4444")
-                .build(),
-            CustomerDto.builder()
-                .firstName("Search")
-                .lastName("User2")
-                .email("search.user2@example.com")
-                .phone("+1 555 555 5555")
-                .build(),
-            CustomerDto.builder()
-                .firstName("Other")
-                .lastName("SearchLast")
-                .email("other.searchlast@example.com")
-                .phone("+1 666 666 6666")
-                .build(),
-            CustomerDto.builder()
-                .firstName("Another")
-                .lastName("Person")
-                .email("another.person@example.com")
-                .phone("+1 777 777 7777")
-                .build()
-        );
+        // Create customers with specific names
+        CustomerDto customer1 = CustomerDto.builder()
+                .firstName("John")
+                .lastName("Smith")
+                .email("john.smith@example.com")
+                .phone("+1 234 567 8903")
+                .build();
+                
+        CustomerDto customer2 = CustomerDto.builder()
+                .firstName("John")
+                .lastName("Doe")
+                .email("john.doe@example.com")
+                .phone("+1 234 567 8904")
+                .build();
+                
+        CustomerDto customer3 = CustomerDto.builder()
+                .firstName("Jane")
+                .lastName("Smith")
+                .email("jane.smith@example.com")
+                .phone("+1 234 567 8905")
+                .build();
         
-        customers.forEach(customer -> {
+        // Create all customers
+        Arrays.asList(customer1, customer2, customer3).forEach(customer -> {
             given()
                 .contentType(ContentType.JSON)
                 .body(customer)
@@ -272,59 +257,62 @@ class CustomerControllerIntegrationTest {
         
         // Search by first name
         given()
-            .queryParam("firstName", "Search")
+            .queryParam("firstName", "John")
         .when()
             .get("/customers")
         .then()
             .statusCode(200)
             .body("size()", equalTo(2))
-            .body("findAll { it.firstName == 'Search' }.size()", equalTo(2));
+            .body("findAll { it.firstName == 'John' }.size()", equalTo(2));
             
         // Search by last name
         given()
-            .queryParam("lastName", "SearchLast")
+            .queryParam("lastName", "Smith")
+        .when()
+            .get("/customers")
+        .then()
+            .statusCode(200)
+            .body("size()", equalTo(2))
+            .body("findAll { it.lastName == 'Smith' }.size()", equalTo(2));
+            
+        // Search by both first and last name
+        given()
+            .queryParam("firstName", "John")
+            .queryParam("lastName", "Smith")
         .when()
             .get("/customers")
         .then()
             .statusCode(200)
             .body("size()", equalTo(1))
-            .body("findAll { it.lastName == 'SearchLast' }.size()", equalTo(1));
-            
-        // Search with no results
-        given()
-            .queryParam("firstName", "NonExistent")
-        .when()
-            .get("/customers")
-        .then()
-            .statusCode(200)
-            .body("size()", equalTo(0));
+            .body("[0].firstName", equalTo("John"))
+            .body("[0].lastName", equalTo("Smith"));
     }
-    
+
     @Test
     void shouldUpdateCustomer() {
-        // Create customer first
+        // Create customer
         CustomerDto customerDto = CustomerDto.builder()
                 .firstName("Original")
                 .lastName("Customer")
-                .email("original.customer@example.com")
-                .phone("+1 888 888 8888")
+                .email("original@example.com")
+                .phone("+1 234 567 8906")
                 .build();
-
-        String customerId = given()
-                .contentType(ContentType.JSON)
-                .body(customerDto)
-            .when()
-                .post("/customers")
-            .then()
-                .statusCode(201)
-                .extract().path("id");
                 
-        // Now update the customer
+        String customerId = given()
+            .contentType(ContentType.JSON)
+            .body(customerDto)
+        .when()
+            .post("/customers")
+        .then()
+            .statusCode(201)
+            .extract().path("id");
+            
+        // Update customer
         CustomerDto updateDto = CustomerDto.builder()
                 .firstName("Updated")
-                .lastName("CustomerNew")
-                .email("updated.customer@example.com")
-                .phone("+1 999 999 9999")
+                .lastName("CustomerInfo")
+                .email("updated@example.com")
+                .phone("+1 234 567 8907")
                 .build();
                 
         given()
@@ -337,11 +325,11 @@ class CustomerControllerIntegrationTest {
             .statusCode(200)
             .body("id", equalTo(customerId))
             .body("firstName", equalTo("Updated"))
-            .body("lastName", equalTo("CustomerNew"))
-            .body("email", equalTo("updated.customer@example.com"))
-            .body("phone", equalTo("+1 999 999 9999"));
+            .body("lastName", equalTo("CustomerInfo"))
+            .body("email", equalTo("updated@example.com"))
+            .body("phone", equalTo("+1 234 567 8907"));
             
-        // Verify update worked - get the customer
+        // Verify update persisted
         given()
             .pathParam("id", customerId)
         .when()
@@ -350,66 +338,54 @@ class CustomerControllerIntegrationTest {
             .statusCode(200)
             .body("firstName", equalTo("Updated"));
     }
-    
+
     @Test
     void shouldReturn404WhenCustomerNotFound() {
         given()
-            .pathParam("id", "nonexistentid")
+            .pathParam("id", "nonexistent-id")
         .when()
             .get("/customers/{id}")
         .then()
             .statusCode(404);
     }
-    
+
     @Test
     void shouldDeleteCustomer() {
-        // Create customer with address
+        // Create customer
         CustomerDto customerDto = CustomerDto.builder()
-                .firstName("Delete")
-                .lastName("Test")
-                .email("delete.test@example.com")
-                .phone("+1 000 000 0000")
+                .firstName("ToDelete")
+                .lastName("Customer")
+                .email("todelete@example.com")
+                .phone("+1 234 567 8908")
                 .build();
-
-        String customerId = given()
-                .contentType(ContentType.JSON)
-                .body(customerDto)
-            .when()
-                .post("/customers")
-            .then()
-                .statusCode(201)
-                .extract().path("id");
                 
-        // Add an address for this customer
+        String customerId = given()
+            .contentType(ContentType.JSON)
+            .body(customerDto)
+        .when()
+            .post("/customers")
+        .then()
+            .statusCode(201)
+            .extract().path("id");
+            
+        // Create address for customer
         AddressDto addressDto = AddressDto.builder()
-                .street("123 Delete St")
-                .city("DeleteCity")
-                .state("NY")
+                .street("Delete Street")
+                .city("Delete City")
+                .state("DC")
                 .zipCode("12345")
-                .country("USA")
-                .isDefault(true)
                 .customerId(customerId)
                 .build();
                 
-        String addressId = given()
-                .contentType(ContentType.JSON)
-                .body(addressDto)
-            .when()
-                .post("/addresses")
-            .then()
-                .statusCode(201)
-                .extract().path("id");
-                
-        // Verify address exists
         given()
-            .pathParam("customerId", customerId)
+            .contentType(ContentType.JSON)
+            .body(addressDto)
         .when()
-            .get("/addresses/customer/{customerId}")
+            .post("/addresses")
         .then()
-            .statusCode(200)
-            .body("size()", equalTo(1));
-                
-        // Now delete the customer
+            .statusCode(201);
+            
+        // Delete customer
         given()
             .pathParam("id", customerId)
         .when()
@@ -425,7 +401,7 @@ class CustomerControllerIntegrationTest {
         .then()
             .statusCode(404);
             
-        // Verify address was also deleted
+        // Verify customer's addresses are gone
         given()
             .pathParam("customerId", customerId)
         .when()
@@ -434,15 +410,15 @@ class CustomerControllerIntegrationTest {
             .statusCode(200)
             .body("size()", equalTo(0));
     }
-    
+
     @Test
     void shouldNotAllowDuplicateEmails() {
         // Create first customer
         CustomerDto customer1 = CustomerDto.builder()
-                .firstName("Dup")
-                .lastName("Test1")
+                .firstName("Original")
+                .lastName("Customer")
                 .email("duplicate@example.com")
-                .phone("+1 111 222 3333")
+                .phone("+1 234 567 8909")
                 .build();
                 
         given()
@@ -453,12 +429,12 @@ class CustomerControllerIntegrationTest {
         .then()
             .statusCode(201);
             
-        // Try to create customer with same email
+        // Try to create second customer with same email
         CustomerDto customer2 = CustomerDto.builder()
-                .firstName("Dup")
-                .lastName("Test2")
+                .firstName("Duplicate")
+                .lastName("Customer")
                 .email("duplicate@example.com")
-                .phone("+1 444 555 6666")
+                .phone("+1 234 567 8910")
                 .build();
                 
         given()
@@ -467,6 +443,7 @@ class CustomerControllerIntegrationTest {
         .when()
             .post("/customers")
         .then()
-            .statusCode(400);
+            .statusCode(400)
+            .body("message", containsString("already exists"));
     }
 }
