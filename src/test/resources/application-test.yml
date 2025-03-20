@@ -1,15 +1,11 @@
-# MongoDB Test configuration
 spring:
   data:
     mongodb:
-      database: testdb
-      port: 0
+      auto-index-creation: true
+  # The MongoDB URI will be set by the TestContainer
 
-# Server configuration
+# Disable context path for testing
 server:
   port: 0
-
-# Logging configuration for tests
-logging:
-  level:
-    org.springframework.data.mongodb: INFO
+  servlet:
+    context-path: /api
