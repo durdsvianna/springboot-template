@@ -1,161 +1,137 @@
 package com.example.customerservice.service.impl;
 
-import com.example.customerservice.dto.AddressDto;
+import java.util.List;
+
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
 import com.example.customerservice.dto.CustomerDto;
+import com.example.customerservice.exception.DuplicateResourceException;
+import com.example.customerservice.exception.NotFoundException;
+import com.example.customerservice.mapper.CustomerMapper;
 import com.example.customerservice.model.Customer;
 import com.example.customerservice.repository.CustomerRepository;
 import com.example.customerservice.service.AddressService;
 import com.example.customerservice.service.CustomerService;
-import lombok.RequiredArgsConstructor;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.NoSuchElementException;
-import java.util.stream.Collectors;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 @Service
+@Slf4j
 @RequiredArgsConstructor
 public class CustomerServiceImpl implements CustomerService {
 
     private final CustomerRepository customerRepository;
+    private final CustomerMapper customerMapper;
     private final AddressService addressService;
 
     @Override
     @Transactional
     public CustomerDto createCustomer(CustomerDto customerDto) {
+        log.debug("Creating customer with email: {}", customerDto.getEmail());
+        
         if (customerRepository.existsByEmail(customerDto.getEmail())) {
-            throw new IllegalArgumentException("Customer with email " + customerDto.getEmail() + " already exists");
+            throw new DuplicateResourceException("Customer", "email", customerDto.getEmail());
         }
-
-        Customer customer = toEntity(customerDto);
-        customer.setCreatedAt(LocalDateTime.now());
-        customer.setUpdatedAt(LocalDateTime.now());
-        customer.setAddressIds(new ArrayList<>());
-
+        
+        Customer customer = customerMapper.toEntity(customerDto);
         Customer savedCustomer = customerRepository.save(customer);
-
-        // Handle addresses if provided
-        List<AddressDto> addresses = customerDto.getAddresses();
-        if (addresses != null && !addresses.isEmpty()) {
-            addresses.forEach(addressDto -> {
-                addressDto.setCustomerId(savedCustomer.getId());
-                AddressDto savedAddress = addressService.createAddress(addressDto);
-                savedCustomer.getAddressIds().add(savedAddress.getId());
-            });
-            customerRepository.save(savedCustomer);
-        }
-
-        return toDto(savedCustomer);
+        
+        return customerMapper.toDto(savedCustomer);
     }
 
     @Override
+    @Transactional(readOnly = true)
     public CustomerDto getCustomerById(String id) {
+        log.debug("Getting customer with ID: {}", id);
+        
         Customer customer = customerRepository.findById(id)
-                .orElseThrow(() -> new NoSuchElementException("Customer not found with id: " + id));
+                .orElseThrow(() -> new NotFoundException("Customer", id));
         
-        return enrichWithAddresses(customer);
+        return customerMapper.toDto(customer);
     }
 
     @Override
+    @Transactional(readOnly = true)
     public CustomerDto getCustomerByEmail(String email) {
+        log.debug("Getting customer with email: {}", email);
+        
         Customer customer = customerRepository.findByEmail(email)
-                .orElseThrow(() -> new NoSuchElementException("Customer not found with email: " + email));
+                .orElseThrow(() -> new NotFoundException("Customer", "email", email));
         
-        return enrichWithAddresses(customer);
-    }
-
-    @Override
-    public List<CustomerDto> getAllCustomers() {
-        return customerRepository.findAll().stream()
-                .map(this::toDto)
-                .collect(Collectors.toList());
-    }
-
-    @Override
-    public List<CustomerDto> searchCustomers(String firstName, String lastName) {
-        List<Customer> customers;
-        
-        if (firstName != null && lastName != null) {
-            customers = customerRepository.findByFirstNameContainingIgnoreCaseAndLastNameContainingIgnoreCase(firstName, lastName);
-        } else if (firstName != null) {
-            customers = customerRepository.findByFirstNameContainingIgnoreCase(firstName);
-        } else if (lastName != null) {
-            customers = customerRepository.findByLastNameContainingIgnoreCase(lastName);
-        } else {
-            customers = customerRepository.findAll();
-        }
-        
-        return customers.stream()
-                .map(this::toDto)
-                .collect(Collectors.toList());
+        return customerMapper.toDto(customer);
     }
 
     @Override
     @Transactional
     public CustomerDto updateCustomer(String id, CustomerDto customerDto) {
+        log.debug("Updating customer with ID: {}", id);
+        
         Customer existingCustomer = customerRepository.findById(id)
-                .orElseThrow(() -> new NoSuchElementException("Customer not found with id: " + id));
-
-        // Check if email is being changed and if it's already in use
+                .orElseThrow(() -> new NotFoundException("Customer", id));
+        
+        // Check if email is being changed and if it already exists
         if (!existingCustomer.getEmail().equals(customerDto.getEmail()) && 
-                customerRepository.existsByEmail(customerDto.getEmail())) {
-            throw new IllegalArgumentException("Email already in use: " + customerDto.getEmail());
+            customerRepository.existsByEmail(customerDto.getEmail())) {
+            throw new DuplicateResourceException("Customer", "email", customerDto.getEmail());
         }
-
-        existingCustomer.setFirstName(customerDto.getFirstName());
-        existingCustomer.setLastName(customerDto.getLastName());
-        existingCustomer.setEmail(customerDto.getEmail());
-        existingCustomer.setPhone(customerDto.getPhone());
-        existingCustomer.setUpdatedAt(LocalDateTime.now());
-
-        Customer updatedCustomer = customerRepository.save(existingCustomer);
-        return enrichWithAddresses(updatedCustomer);
+        
+        Customer updatedCustomer = customerMapper.updateEntity(customerDto, existingCustomer);
+        Customer savedCustomer = customerRepository.save(updatedCustomer);
+        
+        return customerMapper.toDto(savedCustomer);
     }
 
     @Override
     @Transactional
     public void deleteCustomer(String id) {
-        Customer customer = customerRepository.findById(id)
-                .orElseThrow(() -> new NoSuchElementException("Customer not found with id: " + id));
+        log.debug("Deleting customer with ID: {}", id);
         
-        // Delete all addresses associated with this customer
-        addressService.deleteCustomerAddresses(id);
+        if (!customerRepository.existsById(id)) {
+            throw new NotFoundException("Customer", id);
+        }
         
-        // Delete the customer
-        customerRepository.delete(customer);
+        // First delete all addresses associated with the customer
+        addressService.deleteAddressesByCustomerId(id);
+        
+        // Then delete the customer
+        customerRepository.deleteById(id);
     }
 
-    private CustomerDto enrichWithAddresses(Customer customer) {
-        CustomerDto dto = toDto(customer);
-        List<AddressDto> addresses = addressService.getAddressesByCustomerId(customer.getId());
-        dto.setAddresses(addresses);
-        return dto;
+    @Override
+    @Transactional(readOnly = true)
+    public List<CustomerDto> getAllCustomers() {
+        log.debug("Getting all customers");
+        
+        List<Customer> customers = customerRepository.findAll();
+        
+        return customerMapper.toDtoList(customers);
     }
 
-    private Customer toEntity(CustomerDto dto) {
-        return Customer.builder()
-                .id(dto.getId())
-                .firstName(dto.getFirstName())
-                .lastName(dto.getLastName())
-                .email(dto.getEmail())
-                .phone(dto.getPhone())
-                .createdAt(dto.getCreatedAt())
-                .updatedAt(dto.getUpdatedAt())
-                .build();
+    @Override
+    @Transactional(readOnly = true)
+    public List<CustomerDto> findCustomersByFirstName(String firstName) {
+        log.debug("Finding customers with first name: {}", firstName);
+        
+        List<Customer> customers = customerRepository.findByFirstName(firstName);
+        
+        return customerMapper.toDtoList(customers);
     }
 
-    private CustomerDto toDto(Customer entity) {
-        return CustomerDto.builder()
-                .id(entity.getId())
-                .firstName(entity.getFirstName())
-                .lastName(entity.getLastName())
-                .email(entity.getEmail())
-                .phone(entity.getPhone())
-                .createdAt(entity.getCreatedAt())
-                .updatedAt(entity.getUpdatedAt())
-                .build();
+    @Override
+    @Transactional(readOnly = true)
+    public List<CustomerDto> findCustomersByLastName(String lastName) {
+        log.debug("Finding customers with last name: {}", lastName);
+        
+        List<Customer> customers = customerRepository.findByLastName(lastName);
+        
+        return customerMapper.toDtoList(customers);
     }
-} 
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean existsByEmail(String email) {
+        return customerRepository.existsByEmail(email);
+    }
+}
