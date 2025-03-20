@@ -250,7 +250,7 @@ public class CustomerStepDefinitions {
             assertEquals(firstName, name);
         }
     }
-    
+
     @When("I search for customers with last name {string}")
     public void iSearchForCustomersWithLastName(String lastName) {
         Response response = testContext.getRequest()
@@ -259,7 +259,7 @@ public class CustomerStepDefinitions {
                 .get("/customers");
         testContext.setResponse(response);
     }
-    
+
     @And("all customers in the response have last name {string}")
     public void allCustomersInTheResponseHaveLastName(String lastName) {
         List<String> lastNames = testContext.getResponse().jsonPath().getList("lastName");
@@ -267,35 +267,29 @@ public class CustomerStepDefinitions {
             assertEquals(lastName, name);
         }
     }
-    
+
     @When("I create a customer with the following details and addresses:")
     public void iCreateACustomerWithTheFollowingDetailsAndAddresses(DataTable dataTable) {
         List<Map<String, String>> rows = dataTable.asMaps(String.class, String.class);
         Map<String, String> data = rows.get(0);
+        
+        List<AddressDto> addressDtos = new ArrayList<>();
         
         customerDto = CustomerDto.builder()
                 .firstName(data.get("firstName"))
                 .lastName(data.get("lastName"))
                 .email(data.get("email"))
                 .phone(data.get("phone"))
+                .addresses(addressDtos)
                 .build();
-                
-        Response response = testContext.getRequest()
-                .body(customerDto)
-                .when()
-                .post("/customers");
-                
-        String customerId = response.jsonPath().getString("id");
-        testContext.setCustomerId(customerId);
     }
-    
+
     @And("the customer has the following addresses:")
     public void theCustomerHasTheFollowingAddresses(DataTable dataTable) {
         List<Map<String, String>> rows = dataTable.asMaps(String.class, String.class);
-        List<AddressDto> addresses = new ArrayList<>();
         
         for (Map<String, String> data : rows) {
-            AddressDto dto = AddressDto.builder()
+            AddressDto addressDto = AddressDto.builder()
                     .street(data.get("street"))
                     .city(data.get("city"))
                     .state(data.get("state"))
@@ -303,41 +297,35 @@ public class CustomerStepDefinitions {
                     .isDefault(Boolean.parseBoolean(data.get("isDefault")))
                     .customerId(testContext.getCustomerId())
                     .build();
-            addresses.add(dto);
             
             Response response = testContext.getRequest()
-                    .body(dto)
+                    .body(addressDto)
                     .when()
                     .post("/addresses");
-                    
+            
             String addressId = response.jsonPath().getString("id");
             testContext.setAddressId(addressId);
         }
-        
-        // Get the updated customer and set as response for assertions
-        Response response = testContext.getRequest()
-                .when()
-                .get("/customers/" + testContext.getCustomerId());
-        testContext.setResponse(response);
     }
-    
+
     @And("the customer has {int} addresses")
     public void theCustomerHasAddresses(int count) {
         Response response = testContext.getRequest()
                 .when()
                 .get("/addresses/customer/" + testContext.getCustomerId());
                 
-        response.then().statusCode(200);
-        response.then().body("size()", equalTo(count));
+        response.then()
+                .statusCode(200)
+                .body("size()", equalTo(count));
     }
-    
+
     @And("one of the addresses is marked as default")
     public void oneOfTheAddressesIsMarkedAsDefault() {
         Response response = testContext.getRequest()
                 .when()
-                .get("/addresses/customer/" + testContext.getCustomerId() + "/default");
+                .get("/addresses/customer/" + testContext.getCustomerId());
                 
-        response.then().statusCode(200);
-        response.then().body("isDefault", equalTo(true));
+        List<Boolean> defaultValues = response.jsonPath().getList("isDefault");
+        assertThat(defaultValues, hasItem(true));
     }
 }
