@@ -8,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Optional;
@@ -54,31 +55,29 @@ public class AddressServiceImpl implements AddressService {
     }
 
     @Override
-    public AddressDto getDefaultAddressByCustomerId(String customerId) {
+    public AddressDto getDefaultAddress(String customerId) {
         return addressRepository.findByCustomerIdAndIsDefaultTrue(customerId)
                 .map(this::toDto)
                 .orElseThrow(() -> new NoSuchElementException("No default address found for customer id: " + customerId));
     }
 
     @Override
-    public List<AddressDto> searchAddressesByCity(String city) {
-        return addressRepository.findByCity(city).stream()
-                .map(this::toDto)
-                .collect(Collectors.toList());
-    }
-
-    @Override
-    public List<AddressDto> searchAddressesByState(String state) {
-        return addressRepository.findByState(state).stream()
-                .map(this::toDto)
-                .collect(Collectors.toList());
-    }
-
-    @Override
-    public List<AddressDto> searchAddressesByZipCode(String zipCode) {
-        return addressRepository.findByZipCode(zipCode).stream()
-                .map(this::toDto)
-                .collect(Collectors.toList());
+    public List<AddressDto> searchAddresses(String city, String state, String zipCode) {
+        if (city != null) {
+            return addressRepository.findByCity(city).stream()
+                    .map(this::toDto)
+                    .collect(Collectors.toList());
+        } else if (state != null) {
+            return addressRepository.findByState(state).stream()
+                    .map(this::toDto)
+                    .collect(Collectors.toList());
+        } else if (zipCode != null) {
+            return addressRepository.findByZipCode(zipCode).stream()
+                    .map(this::toDto)
+                    .collect(Collectors.toList());
+        }
+        
+        return Collections.emptyList();
     }
 
     @Override
@@ -110,7 +109,23 @@ public class AddressServiceImpl implements AddressService {
 
     @Override
     @Transactional
-    public AddressDto setAddressAsDefault(String addressId, String customerId) {
+    public void deleteAddress(String id) {
+        Address address = addressRepository.findById(id)
+                .orElseThrow(() -> new NoSuchElementException("Address not found with id: " + id));
+        
+        addressRepository.delete(address);
+    }
+
+    @Override
+    @Transactional
+    public void deleteCustomerAddresses(String customerId) {
+        List<Address> addresses = addressRepository.findByCustomerId(customerId);
+        addressRepository.deleteAll(addresses);
+    }
+
+    @Override
+    @Transactional
+    public AddressDto setDefaultAddress(String addressId, String customerId) {
         Address newDefaultAddress = addressRepository.findById(addressId)
                 .orElseThrow(() -> new NoSuchElementException("Address not found with id: " + addressId));
         
@@ -131,15 +146,6 @@ public class AddressServiceImpl implements AddressService {
         Address updatedAddress = addressRepository.save(newDefaultAddress);
         
         return toDto(updatedAddress);
-    }
-
-    @Override
-    @Transactional
-    public void deleteAddress(String id) {
-        Address address = addressRepository.findById(id)
-                .orElseThrow(() -> new NoSuchElementException("Address not found with id: " + id));
-        
-        addressRepository.delete(address);
     }
 
     private Address toEntity(AddressDto dto) {
@@ -167,4 +173,4 @@ public class AddressServiceImpl implements AddressService {
                 .customerId(entity.getCustomerId())
                 .build();
     }
-}
+} 

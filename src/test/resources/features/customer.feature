@@ -87,4 +87,4 @@ Feature: Customer Management
       | 456 Oak Ave  | Othertown | CA    | 67890   | false     |
     Then the customer is successfully created
     And the customer has 2 addresses
-    And one of the addresses is marked as default
+    And one of the addresses is marked as default 

@@ -14,11 +14,9 @@ public interface CustomerService {
     
     List<CustomerDto> getAllCustomers();
     
-    List<CustomerDto> searchCustomersByFirstName(String firstName);
-    
-    List<CustomerDto> searchCustomersByLastName(String lastName);
+    List<CustomerDto> searchCustomers(String firstName, String lastName);
     
     CustomerDto updateCustomer(String id, CustomerDto customerDto);
     
     void deleteCustomer(String id);
-}
+} 

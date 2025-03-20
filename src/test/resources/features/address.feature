@@ -91,4 +91,4 @@ Feature: Address Management
     When I search for addresses in city "SearchCity"
     Then the response status is 200
     And the response contains 2 addresses
-    And all addresses in the response have city "SearchCity"
+    And all addresses in the response have city "SearchCity" 

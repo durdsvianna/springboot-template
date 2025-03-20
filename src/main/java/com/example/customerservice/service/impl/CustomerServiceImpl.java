@@ -75,15 +75,20 @@ public class CustomerServiceImpl implements CustomerService {
     }
 
     @Override
-    public List<CustomerDto> searchCustomersByFirstName(String firstName) {
-        return customerRepository.findByFirstNameContainingIgnoreCase(firstName).stream()
-                .map(this::toDto)
-                .collect(Collectors.toList());
-    }
-
-    @Override
-    public List<CustomerDto> searchCustomersByLastName(String lastName) {
-        return customerRepository.findByLastNameContainingIgnoreCase(lastName).stream()
+    public List<CustomerDto> searchCustomers(String firstName, String lastName) {
+        List<Customer> customers;
+        
+        if (firstName != null && lastName != null) {
+            customers = customerRepository.findByFirstNameContainingIgnoreCaseAndLastNameContainingIgnoreCase(firstName, lastName);
+        } else if (firstName != null) {
+            customers = customerRepository.findByFirstNameContainingIgnoreCase(firstName);
+        } else if (lastName != null) {
+            customers = customerRepository.findByLastNameContainingIgnoreCase(lastName);
+        } else {
+            customers = customerRepository.findAll();
+        }
+        
+        return customers.stream()
                 .map(this::toDto)
                 .collect(Collectors.toList());
     }
@@ -117,9 +122,7 @@ public class CustomerServiceImpl implements CustomerService {
                 .orElseThrow(() -> new NoSuchElementException("Customer not found with id: " + id));
         
         // Delete all addresses associated with this customer
-        addressService.getAddressesByCustomerId(id).forEach(address -> 
-            addressService.deleteAddress(address.getId())
-        );
+        addressService.deleteCustomerAddresses(id);
         
         // Delete the customer
         customerRepository.delete(customer);
@@ -155,4 +158,4 @@ public class CustomerServiceImpl implements CustomerService {
                 .updatedAt(entity.getUpdatedAt())
                 .build();
     }
-}
+} 

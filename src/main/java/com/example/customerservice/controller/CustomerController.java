@@ -47,10 +47,8 @@ public class CustomerController {
             @Parameter(description = "First name to search (optional)") @RequestParam(required = false) String firstName,
             @Parameter(description = "Last name to search (optional)") @RequestParam(required = false) String lastName) {
         
-        if (firstName != null) {
-            return ResponseEntity.ok(customerService.searchCustomersByFirstName(firstName));
-        } else if (lastName != null) {
-            return ResponseEntity.ok(customerService.searchCustomersByLastName(lastName));
+        if (firstName != null || lastName != null) {
+            return ResponseEntity.ok(customerService.searchCustomers(firstName, lastName));
         } else {
             return ResponseEntity.ok(customerService.getAllCustomers());
         }
@@ -71,4 +69,4 @@ public class CustomerController {
         customerService.deleteCustomer(id);
         return ResponseEntity.noContent().build();
     }
-}
+} 

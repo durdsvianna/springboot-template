@@ -18,4 +18,4 @@ public class MongoTestContainer {
         System.setProperty("spring.data.mongodb.uri", mongoDBContainer.getReplicaSetUrl());
         return mongoDBContainer;
     }
-}
+} 

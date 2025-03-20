@@ -45,7 +45,7 @@ public class AddressController {
     @Operation(summary = "Get default address", description = "Returns the default address for a customer if set")
     public ResponseEntity<AddressDto> getDefaultAddress(
             @Parameter(description = "Customer ID", required = true) @PathVariable String customerId) {
-        return ResponseEntity.ok(addressService.getDefaultAddressByCustomerId(customerId));
+        return ResponseEntity.ok(addressService.getDefaultAddress(customerId));
     }
 
     @GetMapping("/search")
@@ -54,16 +54,7 @@ public class AddressController {
             @Parameter(description = "City") @RequestParam(required = false) String city,
             @Parameter(description = "State") @RequestParam(required = false) String state,
             @Parameter(description = "Zip code") @RequestParam(required = false) String zipCode) {
-        
-        if (city != null) {
-            return ResponseEntity.ok(addressService.searchAddressesByCity(city));
-        } else if (state != null) {
-            return ResponseEntity.ok(addressService.searchAddressesByState(state));
-        } else if (zipCode != null) {
-            return ResponseEntity.ok(addressService.searchAddressesByZipCode(zipCode));
-        }
-        
-        return ResponseEntity.ok(List.of());
+        return ResponseEntity.ok(addressService.searchAddresses(city, state, zipCode));
     }
 
     @PutMapping("/{id}")
@@ -79,7 +70,7 @@ public class AddressController {
     public ResponseEntity<AddressDto> setDefaultAddress(
             @Parameter(description = "Address ID", required = true) @PathVariable String addressId,
             @Parameter(description = "Customer ID", required = true) @PathVariable String customerId) {
-        return ResponseEntity.ok(addressService.setAddressAsDefault(addressId, customerId));
+        return ResponseEntity.ok(addressService.setDefaultAddress(addressId, customerId));
     }
 
     @DeleteMapping("/{id}")

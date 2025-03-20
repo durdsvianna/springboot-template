@@ -1,26 +1,25 @@
-# MongoDB configuration
 spring:
   data:
     mongodb:
-      host: ${MONGODB_HOST:localhost}
-      port: ${MONGODB_PORT:27017}
-      database: ${MONGODB_DATABASE:customerdb}
+      uri: mongodb://localhost:27017/customerdb
       auto-index-creation: true
 
-# OpenAPI/Swagger configuration
+# Swagger / OpenAPI configuration
 springdoc:
   api-docs:
     path: /api-docs
   swagger-ui:
     path: /swagger-ui.html
-    operations-sorter: method
+    operationsSorter: method
 
 # Server configuration
 server:
-  port: ${SERVER_PORT:8080}
+  port: 8080
+  servlet:
+    context-path: /api
 
-# Logging configuration
+# Logging
 logging:
   level:
-    org.springframework.data.mongodb: ${LOG_LEVEL:INFO}
-    com.example.customerservice: ${LOG_LEVEL:INFO}
+    org.springframework.data.mongodb.core.MongoTemplate: DEBUG
+    com.example.customerservice: DEBUG 

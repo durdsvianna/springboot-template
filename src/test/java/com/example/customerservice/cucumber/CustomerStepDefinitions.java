@@ -328,4 +328,4 @@ public class CustomerStepDefinitions {
         List<Boolean> defaultValues = response.jsonPath().getList("isDefault");
         assertThat(defaultValues, hasItem(true));
     }
-}
+} 

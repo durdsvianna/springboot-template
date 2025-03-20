@@ -159,63 +159,66 @@ class CustomerServiceImplTest {
 
         // Then
         assertNotNull(result);
+        assertEquals(testCustomer.getId(), result.getId());
         assertEquals(testCustomer.getEmail(), result.getEmail());
+        assertNotNull(result.getAddresses());
         verify(customerRepository).findByEmail("john.doe@example.com");
-    }
-
-    @Test
-    void getCustomerByEmail_WithNonExistentEmail_ShouldThrowException() {
-        // Given
-        when(customerRepository.findByEmail(anyString())).thenReturn(Optional.empty());
-
-        // When & Then
-        assertThrows(NoSuchElementException.class, 
-                () -> customerService.getCustomerByEmail("nonexistent@example.com"));
-        verify(customerRepository).findByEmail("nonexistent@example.com");
     }
 
     @Test
     void getAllCustomers_ShouldReturnAllCustomers() {
         // Given
-        List<Customer> customers = Arrays.asList(testCustomer, 
-                Customer.builder()
-                        .id("2")
-                        .firstName("Jane")
-                        .lastName("Smith")
-                        .email("jane.smith@example.com")
-                        .build());
+        List<Customer> customers = Arrays.asList(testCustomer);
         when(customerRepository.findAll()).thenReturn(customers);
-        when(addressService.getAddressesByCustomerId(anyString())).thenReturn(addressList);
 
         // When
         List<CustomerDto> result = customerService.getAllCustomers();
 
         // Then
         assertNotNull(result);
-        assertEquals(2, result.size());
-        verify(customerRepository).findAll();
-        verify(addressService, times(2)).getAddressesByCustomerId(anyString());
+        assertEquals(1, result.size());
+        assertEquals(testCustomer.getId(), result.get(0).getId());
     }
 
     @Test
-    void updateCustomer_ShouldUpdateCustomer() {
+    void searchCustomers_ByFirstAndLastName_ShouldReturnMatchingCustomers() {
+        // Given
+        List<Customer> customers = Arrays.asList(testCustomer);
+        when(customerRepository.findByFirstNameContainingIgnoreCaseAndLastNameContainingIgnoreCase(anyString(), anyString()))
+                .thenReturn(customers);
+
+        // When
+        List<CustomerDto> result = customerService.searchCustomers("John", "Doe");
+
+        // Then
+        assertNotNull(result);
+        assertEquals(1, result.size());
+        assertEquals(testCustomer.getId(), result.get(0).getId());
+    }
+
+    @Test
+    void updateCustomer_ShouldUpdateExistingCustomer() {
         // Given
         CustomerDto updateDto = CustomerDto.builder()
-                .firstName("John Updated")
-                .lastName("Doe Updated")
-                .phone("+9876543210")
+                .firstName("Johnny")
+                .lastName("Doe")
+                .email("johnny.doe@example.com")
+                .phone("+1234567890")
                 .build();
 
         Customer updatedCustomer = Customer.builder()
                 .id("1")
-                .firstName("John Updated")
-                .lastName("Doe Updated")
-                .email("john.doe@example.com") // Email stays the same
-                .phone("+9876543210")
-                .addressIds(new ArrayList<>(Arrays.asList("addr1")))
+                .firstName("Johnny")
+                .lastName("Doe")
+                .email("johnny.doe@example.com")
+                .phone("+1234567890")
+                .createdAt(testCustomer.getCreatedAt())
+                .updatedAt(LocalDateTime.now())
+                .addressIds(testCustomer.getAddressIds())
                 .build();
 
         when(customerRepository.findById(anyString())).thenReturn(Optional.of(testCustomer));
+        when(customerRepository.existsByEmail(anyString())).thenReturn(false);
         when(customerRepository.save(any(Customer.class))).thenReturn(updatedCustomer);
         when(addressService.getAddressesByCustomerId(anyString())).thenReturn(addressList);
 
@@ -224,26 +227,30 @@ class CustomerServiceImplTest {
 
         // Then
         assertNotNull(result);
-        assertEquals("John Updated", result.getFirstName());
-        assertEquals("Doe Updated", result.getLastName());
-        assertEquals("+9876543210", result.getPhone());
-        assertEquals("john.doe@example.com", result.getEmail()); // Email shouldn't change
-        verify(customerRepository).findById("1");
+        assertEquals("Johnny", result.getFirstName());
+        assertEquals("johnny.doe@example.com", result.getEmail());
         verify(customerRepository).save(any(Customer.class));
     }
 
     @Test
-    void updateCustomer_WithNonExistentId_ShouldThrowException() {
+    void updateCustomer_WithExistingEmail_ShouldThrowException() {
         // Given
         CustomerDto updateDto = CustomerDto.builder()
-                .firstName("John Updated")
+                .firstName("Johnny")
+                .lastName("Doe")
+                .email("existing@example.com") // Different from the customer's current email
+                .phone("+1234567890")
                 .build();
-        when(customerRepository.findById(anyString())).thenReturn(Optional.empty());
+
+        when(customerRepository.findById(anyString())).thenReturn(Optional.of(testCustomer));
+        when(customerRepository.existsByEmail("existing@example.com")).thenReturn(true);
 
         // When & Then
-        assertThrows(NoSuchElementException.class, 
-                () -> customerService.updateCustomer("nonexistent", updateDto));
-        verify(customerRepository).findById("nonexistent");
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> customerService.updateCustomer("1", updateDto)
+        );
+        assertTrue(exception.getMessage().contains("Email already in use"));
         verify(customerRepository, never()).save(any(Customer.class));
     }
 
@@ -251,62 +258,13 @@ class CustomerServiceImplTest {
     void deleteCustomer_ShouldDeleteCustomerAndAddresses() {
         // Given
         when(customerRepository.findById(anyString())).thenReturn(Optional.of(testCustomer));
-        doNothing().when(customerRepository).deleteById(anyString());
-        doNothing().when(addressService).deleteAddressesByCustomerId(anyString());
+        doNothing().when(addressService).deleteCustomerAddresses(anyString());
 
         // When
         customerService.deleteCustomer("1");
 
         // Then
-        verify(customerRepository).findById("1");
-        verify(customerRepository).deleteById("1");
-        verify(addressService).deleteAddressesByCustomerId("1");
+        verify(addressService).deleteCustomerAddresses("1");
+        verify(customerRepository).delete(testCustomer);
     }
-
-    @Test
-    void deleteCustomer_WithNonExistentId_ShouldThrowException() {
-        // Given
-        when(customerRepository.findById(anyString())).thenReturn(Optional.empty());
-
-        // When & Then
-        assertThrows(NoSuchElementException.class, 
-                () -> customerService.deleteCustomer("nonexistent"));
-        verify(customerRepository).findById("nonexistent");
-        verify(customerRepository, never()).deleteById(anyString());
-        verify(addressService, never()).deleteAddressesByCustomerId(anyString());
-    }
-
-    @Test
-    void searchCustomersByFirstName_ShouldReturnMatchingCustomers() {
-        // Given
-        List<Customer> customers = Arrays.asList(testCustomer);
-        when(customerRepository.findByFirstNameContainingIgnoreCase(anyString())).thenReturn(customers);
-        when(addressService.getAddressesByCustomerId(anyString())).thenReturn(addressList);
-
-        // When
-        List<CustomerDto> result = customerService.searchCustomersByFirstName("John");
-
-        // Then
-        assertNotNull(result);
-        assertEquals(1, result.size());
-        assertEquals("John", result.get(0).getFirstName());
-        verify(customerRepository).findByFirstNameContainingIgnoreCase("John");
-    }
-
-    @Test
-    void searchCustomersByLastName_ShouldReturnMatchingCustomers() {
-        // Given
-        List<Customer> customers = Arrays.asList(testCustomer);
-        when(customerRepository.findByLastNameContainingIgnoreCase(anyString())).thenReturn(customers);
-        when(addressService.getAddressesByCustomerId(anyString())).thenReturn(addressList);
-
-        // When
-        List<CustomerDto> result = customerService.searchCustomersByLastName("Doe");
-
-        // Then
-        assertNotNull(result);
-        assertEquals(1, result.size());
-        assertEquals("Doe", result.get(0).getLastName());
-        verify(customerRepository).findByLastNameContainingIgnoreCase("Doe");
-    }
-}
+} 

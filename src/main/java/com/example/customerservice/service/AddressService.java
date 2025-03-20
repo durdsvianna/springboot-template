@@ -12,17 +12,15 @@ public interface AddressService {
     
     List<AddressDto> getAddressesByCustomerId(String customerId);
     
-    AddressDto getDefaultAddressByCustomerId(String customerId);
+    AddressDto getDefaultAddress(String customerId);
     
-    List<AddressDto> searchAddressesByCity(String city);
-    
-    List<AddressDto> searchAddressesByState(String state);
-    
-    List<AddressDto> searchAddressesByZipCode(String zipCode);
+    List<AddressDto> searchAddresses(String city, String state, String zipCode);
     
     AddressDto updateAddress(String id, AddressDto addressDto);
     
-    AddressDto setAddressAsDefault(String addressId, String customerId);
-    
     void deleteAddress(String id);
-}
+    
+    void deleteCustomerAddresses(String customerId);
+    
+    AddressDto setDefaultAddress(String addressId, String customerId);
+} 

@@ -11,4 +11,4 @@ import org.springframework.test.context.ActiveProfiles;
 @Import(MongoTestContainer.class)
 @ActiveProfiles("test")
 public class CucumberSpringConfiguration {
-}
+} 

@@ -19,4 +19,4 @@ public interface CustomerRepository extends MongoRepository<Customer, String> {
     List<Customer> findByFirstNameContainingIgnoreCaseAndLastNameContainingIgnoreCase(String firstName, String lastName);
     
     boolean existsByEmail(String email);
-}
+} 

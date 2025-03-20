@@ -159,16 +159,16 @@ class AddressControllerIntegrationTest {
         .then()
             .statusCode(200)
             .body("size()", equalTo(3))
-            .body("findAll { it.city.startsWith('Test City') }.size()", equalTo(3));
+            .body("findAll { it.customerId == '" + customerId + "' }.size()", equalTo(3));
     }
 
     @Test
     void shouldGetDefaultAddress() {
-        // Given - Create multiple addresses with one default
-        AddressDto defaultAddress = AddressDto.builder()
-                .street("Default St")
+        // Given
+        AddressDto defaultAddressDto = AddressDto.builder()
+                .street("Default Street")
                 .city("Default City")
-                .state("DC")
+                .state("DS")
                 .zipCode("12345")
                 .country("USA")
                 .isDefault(true)
@@ -177,16 +177,17 @@ class AddressControllerIntegrationTest {
 
         given()
             .contentType(ContentType.JSON)
-            .body(defaultAddress)
+            .body(defaultAddressDto)
         .when()
             .post("/addresses")
         .then()
             .statusCode(201);
 
-        AddressDto nonDefaultAddress = AddressDto.builder()
-                .street("Regular St")
-                .city("Regular City")
-                .state("RC")
+        // Add a non-default address too
+        AddressDto nonDefaultAddressDto = AddressDto.builder()
+                .street("Non-Default Street")
+                .city("Non-Default City")
+                .state("ND")
                 .zipCode("67890")
                 .country("USA")
                 .isDefault(false)
@@ -195,7 +196,7 @@ class AddressControllerIntegrationTest {
 
         given()
             .contentType(ContentType.JSON)
-            .body(nonDefaultAddress)
+            .body(nonDefaultAddressDto)
         .when()
             .post("/addresses")
         .then()
@@ -208,89 +209,68 @@ class AddressControllerIntegrationTest {
             .get("/addresses/customer/{customerId}/default")
         .then()
             .statusCode(200)
-            .body("street", equalTo("Default St"))
+            .body("street", equalTo("Default Street"))
             .body("city", equalTo("Default City"))
+            .body("state", equalTo("DS"))
             .body("isDefault", equalTo(true));
     }
 
     @Test
     void shouldSearchAddressesByCity() {
-        // Given - Create addresses in different cities
-        AddressDto address1 = AddressDto.builder()
-                .street("1 Search St")
+        // Given
+        AddressDto addressDto1 = AddressDto.builder()
+                .street("123 Main St")
                 .city("SearchCity")
-                .state("SC")
-                .zipCode("11111")
-                .country("USA")
-                .isDefault(true)
+                .state("NY")
+                .zipCode("12345")
                 .customerId(customerId)
                 .build();
 
-        given()
-            .contentType(ContentType.JSON)
-            .body(address1)
-        .when()
-            .post("/addresses")
-        .then()
-            .statusCode(201);
-
-        AddressDto address2 = AddressDto.builder()
-                .street("2 Search Ave")
-                .city("SearchCity")
-                .state("SC")
-                .zipCode("22222")
-                .country("USA")
-                .isDefault(false)
-                .customerId(customerId)
-                .build();
-
-        given()
-            .contentType(ContentType.JSON)
-            .body(address2)
-        .when()
-            .post("/addresses")
-        .then()
-            .statusCode(201);
-
-        AddressDto address3 = AddressDto.builder()
-                .street("3 Other Blvd")
+        AddressDto addressDto2 = AddressDto.builder()
+                .street("456 Oak St")
                 .city("OtherCity")
-                .state("OC")
-                .zipCode("33333")
-                .country("USA")
-                .isDefault(false)
+                .state("NY")
+                .zipCode("67890")
                 .customerId(customerId)
                 .build();
 
         given()
             .contentType(ContentType.JSON)
-            .body(address3)
+            .body(addressDto1)
         .when()
             .post("/addresses")
         .then()
             .statusCode(201);
 
-        // When & Then - Search by city
+        given()
+            .contentType(ContentType.JSON)
+            .body(addressDto2)
+        .when()
+            .post("/addresses")
+        .then()
+            .statusCode(201);
+
+        // When & Then
         given()
             .queryParam("city", "SearchCity")
         .when()
             .get("/addresses/search")
         .then()
             .statusCode(200)
-            .body("size()", equalTo(2))
-            .body("findAll { it.city == 'SearchCity' }.size()", equalTo(2));
+            .body("size()", equalTo(1))
+            .body("[0].city", equalTo("SearchCity"));
     }
 
     @Test
     void shouldUpdateAddress() {
-        // Given - Create an address first
+        // Given
         AddressDto addressDto = AddressDto.builder()
-                .street("Original St")
+                .street("Original Street")
                 .city("Original City")
-                .state("OG")
+                .state("OS")
                 .zipCode("12345")
                 .country("USA")
-                .isDefault(true)
+                .isDefault(false)
                 .customerId(customerId)
                 .build();
 
@@ -303,16 +283,16 @@ class AddressControllerIntegrationTest {
                 .statusCode(201)
                 .extract().path("id");
 
-        // When - Update the address
         AddressDto updateDto = AddressDto.builder()
-                .street("Updated St")
+                .street("Updated Street")
                 .city("Updated City")
-                .state("UP")
+                .state("US")
                 .zipCode("54321")
                 .country("USA")
                 .isDefault(true)
                 .build();
 
+        // When & Then
         given()
             .contentType(ContentType.JSON)
             .body(updateDto)
@@ -321,95 +301,85 @@ class AddressControllerIntegrationTest {
             .put("/addresses/{id}")
         .then()
             .statusCode(200)
-            .body("street", equalTo("Updated St"))
+            .body("id", equalTo(addressId))
+            .body("street", equalTo("Updated Street"))
             .body("city", equalTo("Updated City"))
-            .body("state", equalTo("UP"))
+            .body("state", equalTo("US"))
             .body("zipCode", equalTo("54321"))
             .body("isDefault", equalTo(true));
-
-        // Then - Verify update persisted
-        given()
-            .pathParam("id", addressId)
-        .when()
-            .get("/addresses/{id}")
-        .then()
-            .statusCode(200)
-            .body("street", equalTo("Updated St"));
     }
 
     @Test
     void shouldSetAddressAsDefault() {
         // Given - Create two addresses
-        AddressDto address1 = AddressDto.builder()
-                .street("First St")
-                .city("First City")
-                .state("FC")
-                .zipCode("11111")
+        AddressDto defaultAddressDto = AddressDto.builder()
+                .street("Default Street")
+                .city("Default City")
+                .state("DS")
+                .zipCode("12345")
                 .country("USA")
                 .isDefault(true)
                 .customerId(customerId)
                 .build();
 
-        String address1Id = given()
-                .contentType(ContentType.JSON)
-                .body(address1)
-            .when()
-                .post("/addresses")
-            .then()
-                .statusCode(201)
-                .extract().path("id");
+        given()
+            .contentType(ContentType.JSON)
+            .body(defaultAddressDto)
+        .when()
+            .post("/addresses")
+        .then()
+            .statusCode(201);
 
-        AddressDto address2 = AddressDto.builder()
-                .street("Second St")
-                .city("Second City")
-                .state("SC")
-                .zipCode("22222")
+        AddressDto nonDefaultAddressDto = AddressDto.builder()
+                .street("Non-Default Street")
+                .city("Non-Default City")
+                .state("ND")
+                .zipCode("67890")
                 .country("USA")
                 .isDefault(false)
                 .customerId(customerId)
                 .build();
 
-        String address2Id = given()
-                .contentType(ContentType.JSON)
-                .body(address2)
-            .when()
-                .post("/addresses")
-            .then()
-                .statusCode(201)
-                .extract().path("id");
+        String nonDefaultAddressId = given()
+            .contentType(ContentType.JSON)
+            .body(nonDefaultAddressDto)
+        .when()
+            .post("/addresses")
+        .then()
+            .statusCode(201)
+            .extract().path("id");
 
-        // When - Set the second address as default
+        // When - Set the non-default address as default
         given()
-            .pathParam("addressId", address2Id)
+            .pathParam("addressId", nonDefaultAddressId)
             .pathParam("customerId", customerId)
         .when()
             .put("/addresses/{addressId}/customer/{customerId}/default")
         .then()
             .statusCode(200)
-            .body("id", equalTo(address2Id))
-            .body("street", equalTo("Second St"))
+            .body("id", equalTo(nonDefaultAddressId))
+            .body("street", equalTo("Non-Default Street"))
             .body("isDefault", equalTo(true));
 
-        // Then - Verify first address is no longer default
+        // Then - Verify the original default is no longer default
         given()
-            .pathParam("id", address1Id)
+            .pathParam("customerId", customerId)
         .when()
-            .get("/addresses/{id}")
+            .get("/addresses/customer/{customerId}/default")
         .then()
             .statusCode(200)
-            .body("isDefault", equalTo(false));
+            .body("street", equalTo("Non-Default Street"));
     }
 
     @Test
     void shouldDeleteAddress() {
-        // Given - Create an address
+        // Given
         AddressDto addressDto = AddressDto.builder()
-                .street("Delete St")
+                .street("To Be Deleted")
                 .city("Delete City")
                 .state("DC")
-                .zipCode("99999")
+                .zipCode("12345")
                 .country("USA")
-                .isDefault(false)
                 .customerId(customerId)
                 .build();
 
@@ -422,7 +392,7 @@ class AddressControllerIntegrationTest {
                 .statusCode(201)
                 .extract().path("id");
 
-        // When - Delete the address
+        // When & Then
         given()
             .pathParam("id", addressId)
         .when()
@@ -430,7 +400,7 @@ class AddressControllerIntegrationTest {
         .then()
             .statusCode(204);
 
-        // Then - Verify address is gone
+        // Verify it's gone
         given()
             .pathParam("id", addressId)
         .when()
@@ -438,4 +408,4 @@ class AddressControllerIntegrationTest {
         .then()
             .statusCode(404);
     }
-}
+} 

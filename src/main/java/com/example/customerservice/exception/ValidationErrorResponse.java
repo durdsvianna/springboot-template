@@ -17,4 +17,4 @@ public class ValidationErrorResponse extends ErrorResponse {
         super(status, message, timestamp);
         this.errors = errors;
     }
-}
+} 
