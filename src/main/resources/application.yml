@@ -1,0 +1,26 @@
+# MongoDB configuration
+spring:
+  data:
+    mongodb:
+      host: ${MONGODB_HOST:localhost}
+      port: ${MONGODB_PORT:27017}
+      database: ${MONGODB_DATABASE:customerdb}
+      auto-index-creation: true
+
+# OpenAPI/Swagger configuration
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: method
+
+# Server configuration
+server:
+  port: ${SERVER_PORT:8080}
+
+# Logging configuration
+logging:
+  level:
+    org.springframework.data.mongodb: ${LOG_LEVEL:INFO}
+    com.example.customerservice: ${LOG_LEVEL:INFO}
