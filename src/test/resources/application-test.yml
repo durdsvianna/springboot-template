@@ -1,0 +1,13 @@
+spring:
+  data:
+    mongodb:
+      uri: mongodb://${embedded.mongodb.host}:${embedded.mongodb.port}/test
+      auto-index-creation: true
+  
+server:
+  port: 0
+
+logging:
+  level:
+    org.springframework.data.mongodb: INFO
+    com.example.customerservice: DEBUG
